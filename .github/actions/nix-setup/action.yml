@@ -1,0 +1,64 @@
+name: Setup
+description: "Setup the GitHub Actions environment with nix."
+
+inputs:
+  cant-cache-me-nix-secret-signing-key:
+    description: "The cantcache.me Nix secret signing key."
+    required: true
+  cloudflare-r2-access-key-id:
+    description: "The Cloudflare R2 access key ID."
+    required: true
+  cloudflare-r2-secret-access-key:
+    description: "The Cloudflare R2 secret access key."
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Get the home directory
+      id: get-home
+      shell: bash
+      run: echo "home=$HOME" >> "$GITHUB_OUTPUT"
+
+    - name: Create cantcache.me binary cache S3 API credentials
+      shell: bash
+      run: |
+        mkdir -p "${{ steps.get-home.outputs.home }}/.aws"
+        cat > "${{ steps.get-home.outputs.home }}/.aws/credentials" <<EOF
+        [cant-cache-me]
+        aws_access_key_id = ${{ inputs.cloudflare-r2-access-key-id }}
+        aws_secret_access_key = ${{ inputs.cloudflare-r2-secret-access-key }}
+        EOF
+        cat > "${{ steps.get-home.outputs.home }}/.aws/config" <<EOF
+        [cant-cache-me]
+        region = us-east-1
+        EOF
+
+    - name: Create Nix secret signing key
+      shell: bash
+      run: |
+        mkdir -p "${{ steps.get-home.outputs.home }}/.config/nix"
+        echo "${{ inputs.cant-cache-me-nix-secret-signing-key }}" \
+          > "${{ steps.get-home.outputs.home }}/.config/nix/secret-signing-key.key"
+
+    - name: Install Nix
+      uses: cachix/install-nix-action@v21
+      with:
+        install_url: https://releases.nixos.org/nix/nix-2.16.0/install
+        extra_nix_config: |
+          accept-flake-config = true
+          allow-import-from-derivation = false
+          cores = 0
+          experimental-features = flakes nix-command no-url-literals
+          extra-substituters = https://cantcache.me https://cuda-maintainers.cachix.org
+          extra-trusted-users = @nixbld @wheel runner ${{ github.actor }}
+          extra-trusted-public-keys = cantcache.me:Y+FHAKfx7S0pBkBMKpNMQtGKpILAfhmqUSnr5oNwNMs= cuda-maintainers.cachix.org-1:0dq3bujKpuEPMCX6U4WylrUDZ9JyUG0VpVZa7CNfq5E=
+          fsync-metadata = false # for performance
+          http-connections = 0
+          keep-derivations = true
+          keep-outputs = true
+          max-jobs = auto
+          max-substitution-jobs = 1024
+          narinfo-cache-negative-ttl = 0
+          secret-key-files = ${{ steps.get-home.outputs.home }}/.config/nix/secret-signing-key.key
+          system-features = nixos-test benchmark big-parallel kvm

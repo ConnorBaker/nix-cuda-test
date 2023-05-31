@@ -1,0 +1,335 @@
+name: Azure VM
+on: [push]
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  ensure-nixos-azure-vhd-is-cached:
+    name: Ensure NixOS Azure VHD is cached
+    runs-on: ubuntu-latest
+    outputs:
+      nix-store-entry: ${{ steps.get-store-entry.outputs.store-entry }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Set up Nix
+        uses: ./.github/actions/nix-setup
+        with:
+          cant-cache-me-nix-secret-signing-key: ${{ secrets.CANT_CACHE_ME_NIX_SECRET_SIGNING_KEY }}
+          cloudflare-r2-access-key-id: ${{ secrets.CLOUDFLARE_R2_ACCESS_KEY_ID }}
+          cloudflare-r2-secret-access-key: ${{ secrets.CLOUDFLARE_R2_SECRET_ACCESS_KEY }}
+
+      - name: Get the store entry for the VHD
+        id: get-store-entry
+        run: |
+          nix eval --raw .#nixosConfigurations.azure.outPath \
+            | sed 's|/nix/store/|store-entry=|' \
+            >> "$GITHUB_OUTPUT"
+
+      - name: Check if the VHD is in our binary cache
+        id: check-cache
+        # Note: The command will fail if the store entry is not cached.
+        run: |
+          nix path-info --store https://cantcache.me \
+              "/nix/store/${{ steps.get-store-entry.outputs.store-entry }}" \
+            && echo "is-cached=true" >> "$GITHUB_OUTPUT" \
+            || echo "is-cached=false" >> "$GITHUB_OUTPUT"
+
+      - name: Build the VHD
+        if: ${{ steps.check-cache.outputs.is-cached == 'false' }}
+        run: nix build --print-build-logs .#nixosConfigurations.azure
+
+      - name: Copy the VHD to our binary cache
+        if: ${{ steps.check-cache.outputs.is-cached == 'false' }}
+        run: nix copy -v --to "${{ secrets.CANT_CACHE_ME_NIX_S3_URI }}" .#nixosConfigurations.azure
+
+      - name: Copy the VHD to GitHub Actions' cache
+        if: ${{ steps.check-cache.outputs.is-cached == 'false' }}
+        uses: actions/cache/save@v3
+        with:
+          key: ${{ steps.get-store-entry.outputs.store-entry }}
+          path: ./result/disk.vhd
+
+  ensure-nixos-azure-vhd-blob-exists:
+    name: Ensure NixOS Azure VHD blob exists
+    runs-on: ubuntu-latest
+    needs: ensure-nixos-azure-vhd-is-cached
+    outputs:
+      nix-store-entry: ${{ needs.ensure-nixos-azure-vhd-is-cached.outputs.nix-store-entry }}
+    env:
+      AZURE_STORAGE_ACCOUNT: ${{ secrets.AZURE_STORAGE_ACCOUNT }}
+      AZURE_STORAGE_AUTH_MODE: login
+      NIX_STORE_ENTRY: ${{ needs.ensure-nixos-azure-vhd-is-cached.outputs.nix-store-entry }}
+    steps:
+      - name: Log in to Azure
+        uses: Azure/login@v1
+        with:
+          creds: |
+            {
+              "clientId": "${{ secrets.AZURE_CLIENT_ID }}",
+              "clientSecret": "${{ secrets.AZURE_CLIENT_SECRET }}",
+              "subscriptionId": "${{ secrets.AZURE_SUBSCRIPTION_ID }}",
+              "tenantId": "${{ secrets.AZURE_TENANT_ID }}"
+            }
+
+      - name: Check if VHD exists in blob storage
+        id: check-vhd-blob-exists
+        run: |
+          az storage blob exists \
+              --container-name "${{ secrets.AZURE_STORAGE_CONTAINER }}" \
+              --name "${{ env.NIX_STORE_ENTRY }}.vhd" \
+            | jq -r '"vhd-blob-exists=\(.exists)"' \
+            >> "$GITHUB_OUTPUT"
+
+      - name: Restore the VHD from GitHub Actions' cache
+        if: ${{ steps.check-vhd-blob-exists.outputs.vhd-blob-exists == 'false' }}
+        id: restore-vhd
+        uses: actions/cache/restore@v3
+        with:
+          key: ${{ env.NIX_STORE_ENTRY }}
+          path: ./result/disk.vhd
+
+      - name: Checkout
+        if: ${{ steps.restore-vhd.outputs.cache-hit == 'false' }}
+        uses: actions/checkout@v3
+
+      - name: Set up Nix
+        if: ${{ steps.restore-vhd.outputs.cache-hit == 'false' }}
+        uses: ./.github/actions/nix-setup
+        with:
+          cant-cache-me-nix-secret-signing-key: ${{ secrets.CANT_CACHE_ME_NIX_SECRET_SIGNING_KEY }}
+          cloudflare-r2-access-key-id: ${{ secrets.CLOUDFLARE_R2_ACCESS_KEY_ID }}
+          cloudflare-r2-secret-access-key: ${{ secrets.CLOUDFLARE_R2_SECRET_ACCESS_KEY }}
+
+      - name: Download the NAR for the VHD
+        if: ${{ steps.restore-vhd.outputs.cache-hit == 'false' }}
+        run: |
+          nix store dump-path -v \
+              --store https://cantcache.me \
+              "/nix/store/${{ env.NIX_STORE_ENTRY }}" \
+            > "./${{ env.NIX_STORE_ENTRY }}.nar"
+
+      - name: Extract the VHD from the NAR
+        if: ${{ steps.restore-vhd.outputs.cache-hit == 'false' }}
+        run: |
+          mkdir "./result"
+          nix nar cat -v "./${{ env.NIX_STORE_ENTRY }}.nar" /disk.vhd \
+            > "./result/disk.vhd"
+
+      - name: Copy the VHD to GitHub Actions' cache
+        if: ${{ steps.restore-vhd.outputs.cache-hit == 'false' }}
+        uses: actions/cache/save@v3
+        with:
+          key: ${{ env.NIX_STORE_ENTRY }}
+          path: ./result/disk.vhd
+
+      - name: Upload the VHD to an Azure blob
+        if: ${{ steps.check-vhd-blob-exists.outputs.vhd-blob-exists == 'false' }}
+        run: |
+          az storage blob upload \
+            --container-name "${{ secrets.AZURE_STORAGE_CONTAINER }}" \
+            --file "./result/disk.vhd" \
+            --max-connections 8 \
+            --name "${{ env.NIX_STORE_ENTRY }}.vhd" \
+            --type page
+
+  # We use the store entry as the name of the VM.
+  # This lets us check if a VM running on the same image already exists.
+  ensure-nixos-azure-vm-is-running:
+    name: Ensure NixOS Azure VM is running
+    runs-on: ubuntu-latest
+    needs: ensure-nixos-azure-vhd-blob-exists
+    env:
+      AZURE_STORAGE_ACCOUNT: ${{ secrets.AZURE_STORAGE_ACCOUNT }}
+      AZURE_STORAGE_AUTH_MODE: login
+      # All numbers are for spot instances in East US as of 2023-06-03.
+      # Standard_HB120rs_v3:
+      # - https://learn.microsoft.com/en-us/azure/virtual-machines/hbv3-series
+      # - 120 AMD EPYC™ 7V73X (Milan-X) CPU cores
+      # - 448 GB of RAM
+      # - 2 * 960 GB SSD
+      # - $0.37/hour
+      # Standard_NC8as_T4_v3:
+      # - https://learn.microsoft.com/en-us/azure/virtual-machines/nct4-v3-series
+      # - 1x NVIDIA Tesla T4 GPU with 16 GB of RAM
+      # - 8 AMD EPYC 7V12 (Rome) CPU cores
+      # - 56 GB of RAM
+      # - 1 * 360 GB SSD
+      # - $0.14/hour
+      # Standard_NV36ads_A10_v5:
+      # - https://learn.microsoft.com/en-us/azure/virtual-machines/nva10v5-series
+      # - 1x NVIDIA A10 GPU with 24 GB of RAM
+      # - 36 AMD EPYC 74F3V(Milan) CPU cores
+      # - 440 GB of RAM
+      # - 1 * 1440 GB SSD
+      # - $1.28/hour
+      AZURE_VM_SIZE: Standard_DS1_v2
+      NIX_STORE_ENTRY: ${{ needs.ensure-nixos-azure-vhd-blob-exists.outputs.nix-store-entry }}
+    outputs:
+      nix-store-entry: ${{ needs.ensure-nixos-azure-vhd-blob-exists.outputs.nix-store-entry }}
+      public-ip-address: ${{ steps.get-public-ip-address.outputs.public-ip-address }}
+    steps:
+      - name: Log in to Azure
+        uses: Azure/login@v1
+        with:
+          creds: |
+            {
+              "clientId": "${{ secrets.AZURE_CLIENT_ID }}",
+              "clientSecret": "${{ secrets.AZURE_CLIENT_SECRET }}",
+              "subscriptionId": "${{ secrets.AZURE_SUBSCRIPTION_ID }}",
+              "tenantId": "${{ secrets.AZURE_TENANT_ID }}"
+            }
+
+      # TODO(@connorbaker): Allow multiple VMs to be created.
+      - name: Check if VMs are running
+        id: check-vm-running
+        run: |
+          echo "::group::Get VMs"
+          VMS=$(az vm list --resource-group "${{ secrets.AZURE_RESOURCE_GROUP }}")
+          echo "$VMS" | jq
+          echo "::endgroup::"
+          echo "::group::Filter VMs by name"
+          MATCHING_VMS=$(echo "$VMS" | jq -r --arg name "${{ env.NIX_STORE_ENTRY }}" 'map(select(.name == $name))')
+          echo "$MATCHING_VMS" | jq
+          echo "::endgroup::"
+          echo "::group::Get number of matching VMs"
+          NUM_MATCHING_VMS=$(echo "$MATCHING_VMS" | jq length)
+          echo "Number of matching VMs: $NUM_MATCHING_VMS"
+          echo "::endgroup::"
+          echo "::group::Switch on the number of matching VMs"
+          case $NUM_MATCHING_VMS in
+            0)
+              echo "vm-running=false" >> "$GITHUB_OUTPUT"
+              ;;
+            1)
+              echo "vm-running=true" >> "$GITHUB_OUTPUT"
+              ;;
+            *)
+              echo "Multiple VMs with the same name found" >&2
+              echo "$MATCHING_VMS" >&2
+              exit 1
+              ;;
+          esac
+          echo "::endgroup::"
+
+      - name: Get the VHD blob URL
+        id: get-vhd-blob-url
+        if: ${{ steps.check-vm-running.outputs.vm-running == 'false' }}
+        run: |
+          az storage blob url \
+              --container-name "${{ secrets.AZURE_STORAGE_CONTAINER }}" \
+              --name "${{ env.NIX_STORE_ENTRY }}.vhd" \
+            | jq -r '"vhd-blob-url=\(.)"' >> "$GITHUB_OUTPUT"
+
+      # TODO(@connorbaker): Allow multiple VMs to be created.
+      - name: Create the VM
+        id: create-vm
+        if: ${{ steps.check-vm-running.outputs.vm-running == 'false' }}
+        run: |
+          az vm create \
+              --attach-os-disk "${{ steps.get-vhd-blob-url.outputs.vhd-blob-url }}" \
+              --eviction-policy Delete \
+              --location eastus \
+              --max-price 1.0 \
+              --name "${{ env.NIX_STORE_ENTRY }}" \
+              --nic-delete-option Delete \
+              --os-type linux \
+              --priority Spot \
+              --public-ip-address-allocation dynamic \
+              --resource-group "${{ secrets.AZURE_RESOURCE_GROUP }}" \
+              --size "${{ env.AZURE_VM_SIZE }}" \
+              --use-unmanaged-disk \
+              --user-data "./cloud-init.yaml" \
+            | jq -r '"public-ip-address=\(.publicIpAddress)"' >> "$GITHUB_OUTPUT"
+
+      - name: Wait for the VM to be created
+        if: ${{ steps.check-vm-running.outputs.vm-running == 'false' }}
+        run: |
+          az vm wait \
+            --created \
+            --name "${{ env.NIX_STORE_ENTRY }}" \
+            --resource-group "${{ secrets.AZURE_RESOURCE_GROUP }}"
+
+      - name: Get the public ip address of the VM
+        id: get-public-ip-address
+        run: |
+          az vm show \
+              --name "${{ env.NIX_STORE_ENTRY }}" \
+              --resource-group "${{ secrets.AZURE_RESOURCE_GROUP }}" \
+              --show-details \
+            | jq -r '"public-ip-address=\(.publicIps)"' >> "$GITHUB_OUTPUT"
+
+  # TODO(@connorbaker): Refactor to allow setting up multiple VMs.
+  ensure-nixos-azure-vm-hercules-ci-configured:
+    name: Ensure NixOS Azure VM has Hercules CI configured
+    runs-on: ubuntu-latest
+    needs: ensure-nixos-azure-vm-is-running
+    env:
+      AZURE_VM_IP: ${{ needs.ensure-nixos-azure-vm-is-running.outputs.public-ip-address }}
+    steps:
+      - name: Set up the GitHub runner SSH keys
+        run: |
+          mkdir -p "$HOME/.ssh"
+          chmod 700 "$HOME/.ssh"
+          echo "${{ secrets.RUNNER_SSH_PRIVATE_KEY }}" > "$HOME/.ssh/ed25519"
+          chmod 600 "$HOME/.ssh/ed25519"
+          echo "${{ secrets.RUNNER_SSH_PUBLIC_KEY }}" > "$HOME/.ssh/ed25519.pub"
+          chmod 600 "$HOME/.ssh/ed25519.pub"
+          cat >> "$HOME/.ssh/config" <<EOF
+          Host vm
+            HostName ${{ env.AZURE_VM_IP }}
+            User runner
+            IdentityFile $HOME/.ssh/ed25519
+            StrictHostKeyChecking no
+          EOF
+          chmod 600 "$HOME/.ssh/config"
+
+      - name: Check if the agent is active (and so configured)
+        id: hercules-ci-agent-active
+        run: |
+          ssh vm "sudo systemctl is-active --quiet hercules-ci-agent.service" \
+            && echo "active=true" >> "$GITHUB_OUTPUT" \
+            || echo "active=false" >> "$GITHUB_OUTPUT"
+
+      - name: Stop the agent
+        if: ${{ steps.hercules-ci-agent-active.outputs.active == 'false' }}
+        run: ssh vm "sudo systemctl stop hercules-ci-agent.service"
+
+      - name: Create the agent secrets directory
+        if: ${{ steps.hercules-ci-agent-active.outputs.active == 'false' }}
+        run: ssh vm "sudo mkdir -p /var/lib/hercules-ci-agent/secrets"
+
+      - name: Create the agent binary-caches secret
+        if: ${{ steps.hercules-ci-agent-active.outputs.active == 'false' }}
+        run: |
+          echo '{
+            "cantcache.me": {
+              "kind": "NixCache",
+              "storeURI": "${{ secrets.CANT_CACHE_ME_NIX_S3_URI }}",
+              "publicKeys": [
+                "cantcache.me:Y+FHAKfx7S0pBkBMKpNMQtGKpILAfhmqUSnr5oNwNMs="
+              ],
+              "signingKeys": [
+                "${{ secrets.CANT_CACHE_ME_NIX_SECRET_SIGNING_KEY }}"
+              ]
+            }
+          }' \
+            | ssh vm "sudo tee /var/lib/hercules-ci-agent/secrets/binary-caches.json"
+
+      - name: Create the agent cluster join token secret
+        if: ${{ steps.hercules-ci-agent-active.outputs.active == 'false' }}
+        run: |
+          echo "${{ secrets.HERCULES_CI_CLUSTER_JOIN_TOKEN }}" \
+            | ssh vm "sudo tee /var/lib/hercules-ci-agent/secrets/cluster-join-token.key"
+
+      - name: Fix permissions on the agent secrets directory
+        if: ${{ steps.hercules-ci-agent-active.outputs.active == 'false' }}
+        run: |
+          ssh vm "sudo chown -R hercules-ci-agent /var/lib/hercules-ci-agent"
+          ssh vm "sudo chmod o-rwx /var/lib/hercules-ci-agent/secrets"
+
+      - name: Start the agent
+        if: ${{ steps.hercules-ci-agent-active.outputs.active == 'false' }}
+        run: ssh vm "sudo systemctl start hercules-ci-agent.service"

@@ -1,0 +1,159 @@
+name: Lambda VM
+on:
+  workflow_dispatch:
+    inputs:
+      gpu:
+        description: "The GPU type."
+        required: true
+        type: choice
+        options:
+          - gpu_1x_a10
+          - gpu_1x_a100
+          - gpu_1x_a100_sxm4
+          - gpu_1x_a6000
+          - gpu_1x_h100_pcie
+          - gpu_1x_rtx6000
+          - gpu_2x_a100
+          - gpu_2x_a6000
+          - gpu_4x_a100
+          - gpu_4x_a6000
+          - gpu_8x_a100
+          - gpu_8x_a100_80gb_sxm4
+          - gpu_8x_v100
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  ensure-lambda-vm-is-running:
+    name: Ensure Lambda VM is running
+    runs-on: ubuntu-latest
+    outputs:
+      public-ip-address: ${{ steps.get-public-ip-address.outputs.public-ip-address }}
+    env:
+      AUTH_HEADER: "${{ secrets.LAMBDA_CLOUD_RUNNER_API_KEY }}"
+      API: https://cloud.lambdalabs.com/api/v1
+    steps:
+      - name: Get running instances
+        id: running-instances
+        run: |
+          RUNNING_INSTANCES=$(
+            curl --silent -H "${{ env.AUTH_HEADER }}" "${{ env.API }}/instances" \
+              | jq -c -r '.data'
+          )
+          jq <<< "$RUNNING_INSTANCES"
+          echo "json=$RUNNING_INSTANCES" >> "$GITHUB_OUTPUT"
+
+      - name: Get matching instances
+        id: matching-instances
+        env:
+          INSTANCES: ${{ steps.running-instances.outputs.json }}
+        run: |
+          FILTERED=$(
+            jq -c -r --arg GPU "${{ inputs.gpu }}" \
+              'if length == 0 then
+                  []
+              else
+                  .data | map(select(.instance_type_name == $GPU))
+              end' \
+              <<< "${{ env.INSTANCES }}"
+          )
+          jq <<< "$FILTERED"
+          echo "json=$FILTERED" >> "$GITHUB_OUTPUT"
+
+      - name: Check whether the VM is running
+        id: check-vm-running
+        env:
+          INSTANCES: ${{ steps.matching-instances.outputs.json }}
+        run: |
+          NUM_INSTANCES=$(jq length <<< "${{ env.INSTANCES }}")
+          case $NUM_INSTANCES in
+            0)
+              echo "VM is not running."
+              echo "vm-running=false" >> "$GITHUB_OUTPUT"
+              ;;
+            1)
+              echo "VM is running."
+              echo "vm-running=true" >> "$GITHUB_OUTPUT"
+              ;;
+            *)
+              echo "More than one instance is running."
+              exit 1
+              ;;
+          esac
+
+      - name: Get regions in which instance is available
+        id: available-regions
+        if: steps.check-vm-running.outputs.vm-running == 'false'
+        run: |
+          REGIONS=$(
+            curl --silent -H "${{ env.AUTH_HEADER }}" "${{ env.API }}/instance-types" \
+              | jq -c -r '.data.${{ inputs.gpu }}.regions_with_capacity_available | map(.name)'
+          )
+          jq <<< "$REGIONS"
+          echo "json=$REGIONS" >> "$GITHUB_OUTPUT"
+
+      - name: Select region
+        if: steps.check-vm-running.outputs.vm-running == 'false'
+        id: select-region
+        env:
+          REGIONS: ${{ steps.available-regions.outputs.json }}
+        run: |
+          NUM_REGIONS=$(jq length <<< "REGIONS")
+          if [[ $NUM_REGIONS -eq 0 ]]; then
+            echo "No regions available."
+            exit 1
+          fi
+
+          US_REGIONS=$(jq -c -r 'map(select(. | startswith("us-")))' <<< "${{ env.REGIONS }}")
+          if [[ $(jq length <<< "$US_REGIONS") -gt 0 ]]; then
+            echo "Found US regions: preferring them for for lower latency."
+            REGION=$(jq -r '.[0]' <<< "$US_REGIONS")
+          else
+            REGION=$(jq -r '.[0]' <<< "${{ env.REGIONS }}")
+          fi
+
+          echo "Selected region: $REGION"
+          echo "region=$REGION" >> "$GITHUB_OUTPUT"
+
+      - name: Create instance
+        if: steps.check-vm-running.outputs.vm-running == 'false'
+        id: create-instance
+        env:
+          REGION: ${{ steps.select-region.outputs.region }}
+        run: |
+          BODY='{
+            "region_name": "${{ env.REGION }}",
+            "instance_type_name": "${{ inputs.gpu }}",
+            "ssh_key_names": ["github-runner"]
+          }'
+          echo "Sending body:"
+          jq <<< "$BODY"
+
+          INSTANCE=$(
+            curl "${{ env.API }}/instance-operations/launch" \
+              --silent \
+              -X POST \
+              -H 'Content-Type: application/json' \
+              -H "${{ env.AUTH_HEADER }}" \
+              -d "$BODY"
+          )
+
+      # TODO: Set up the GitHub runner to configure the lambda instance
+      # - name: Set up the GitHub runner SSH keys
+      #   run: |
+      #     mkdir -p "$HOME/.ssh"
+      #     chmod 700 "$HOME/.ssh"
+      #     echo "${{ secrets.RUNNER_SSH_PRIVATE_KEY }}" > "$HOME/.ssh/ed25519"
+      #     chmod 600 "$HOME/.ssh/ed25519"
+      #     echo "${{ secrets.RUNNER_SSH_PUBLIC_KEY }}" > "$HOME/.ssh/ed25519.pub"
+      #     chmod 600 "$HOME/.ssh/ed25519.pub"
+      #     cat >> "$HOME/.ssh/config" <<EOF
+      #     Host vm
+      #       HostName ${{ env.AZURE_VM_IP }}
+      #       User runner
+      #       IdentityFile $HOME/.ssh/ed25519
+      #       StrictHostKeyChecking no
+      #     EOF
+      #     chmod 600 "$HOME/.ssh/config"

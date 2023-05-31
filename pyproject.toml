@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "nix_cuda_test"
+dynamic = ["version"]
+authors = [{ name = "Connor Baker", email = "connorbaker01@gmail.com" }]
+description = "Test project for Nix CUDA support"
+readme = "README.md"
+requires-python = ">=3.10"
+keywords = ["nix", "machine", "learning", "torch", "gpu", "test", "cuda"]
+license = { text = "BSD-3-Clause" }
+classifiers = ["Programming Language :: Python :: 3"]
+dependencies = ["pip>=21.3.1", "torch>=2.0", "triton>=2.0", "xformers>=0.0.20"]
+
+[tool.ruff]
+select = ["E", "F", "B"]
+# Set line length to 88 characters
+line-length = 88
+
+[tool.setuptools]
+packages = ["nix_cuda_test"]
+
+[tool.setuptools.dynamic]
+version = { attr = "nix_cuda_test.__version__" }
