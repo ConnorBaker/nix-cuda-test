@@ -1,0 +1,85 @@
+name: NixOS Azure VHD
+
+defaults:
+  run:
+    shell: bash
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  ensure-nixos-azure-vhd-is-cached:
+    name: Ensure NixOS Azure VHD is cached
+    runs-on: ubuntu-latest
+    outputs:
+      store-entry: ${{ steps.store-entry.outputs.store-entry }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Set up Nix
+        uses: ./.github/actions/nix-setup
+        with:
+          cant-cache-me-nix-secret-signing-key: ${{ secrets.CANT_CACHE_ME_NIX_SECRET_SIGNING_KEY }}
+          cloudflare-r2-access-key-id: ${{ secrets.CLOUDFLARE_R2_ACCESS_KEY_ID }}
+          cloudflare-r2-secret-access-key: ${{ secrets.CLOUDFLARE_R2_SECRET_ACCESS_KEY }}
+
+      - name: Get the store path for the VHD
+        id: store-path
+        run: |
+          nix eval --json .#nixosConfigurations.azure.outPath \
+            | jq -cr '"store-path=\(.)"' \
+            | tee -a "$GITHUB_OUTPUT"
+
+      - name: Get the store entry for the VHD
+        id: store-entry
+        run: |
+          sed 's|/nix/store/|store-entry=|' <<< "${{ steps.store-path.outputs.store-path }}" \
+            | tee -a "$GITHUB_OUTPUT"
+
+      - name: Get information about the VHD
+        id: path-info
+        run: |
+          nix path-info \
+              --json \
+              --store https://cantcache.me \
+              "${{ steps.store-path.outputs.store-path }}" \
+            | jq -cr '"json=\(.[0])"' \
+            | tee -a "$GITHUB_OUTPUT"
+
+      - name: Build the VHD
+        if: ${{ !fromJSON(steps.path-info.outputs.json).valid }}
+        run: nix build --print-build-logs .#nixosConfigurations.azure
+
+      - name: Copy the VHD to our binary cache
+        if: ${{ !fromJSON(steps.path-info.outputs.json).valid }}
+        run: nix copy -v --to "${{ secrets.CANT_CACHE_ME_NIX_S3_URI }}" .#nixosConfigurations.azure
+
+      - name: Copy the VHD to GitHub Actions' cache
+        if: ${{ !fromJSON(steps.path-info.outputs.json).valid }}
+        uses: actions/cache/save@v3
+        with:
+          key: ${{ steps.store-entry.outputs.store-entry }}
+          path: ./result/disk.vhd
+
+  nixos-azure-vhd-info:
+    name: Create a job summary with information about the VHD
+    runs-on: ubuntu-latest
+    needs: ensure-nixos-azure-vhd-is-cached
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Set up Nix
+        uses: ./.github/actions/nix-setup
+        with:
+          cant-cache-me-nix-secret-signing-key: ${{ secrets.CANT_CACHE_ME_NIX_SECRET_SIGNING_KEY }}
+          cloudflare-r2-access-key-id: ${{ secrets.CLOUDFLARE_R2_ACCESS_KEY_ID }}
+          cloudflare-r2-secret-access-key: ${{ secrets.CLOUDFLARE_R2_SECRET_ACCESS_KEY }}
+
+      - name: Add info about the VHD to the job summary
+        uses: ./.github/actions/nix-path-info-markdown-table
+        with:
+          store-path: /nix/store/${{ needs.ensure-nixos-azure-vhd-is-cached.outputs.store-entry }}

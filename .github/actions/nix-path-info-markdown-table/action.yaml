@@ -1,0 +1,52 @@
+name: nix path-info markdown table
+description: Add a markdown table of the nix store path to the job summary.
+
+inputs:
+  store-path:
+    description: The nix store path to query.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    # Note: The command will fail if the store entry is not cached and we use the recursive
+    # flag. So we introduce a separate step to check the top-level store path.
+    - name: Check if the Nix store path exists in the cache
+      id: check-cache
+      shell: bash
+      run: |
+        nix path-info \
+            --json \
+            --store https://cantcache.me \
+            "${{ inputs.store-path }}" \
+          | jq -cr '"json=\(.[0])"' \
+          | tee -a "$GITHUB_OUTPUT"
+
+    - name: Exit because the store path is not cached
+      if: ${{ !fromJSON(steps.check-cache.outputs.json).valid }}
+      shell: bash
+      run: |
+        echo "The store path ${{ inputs.store-path }} is not cached."
+        exit 1
+
+    - name: Add summary for store path
+      shell: bash
+      run: |
+        echo "## ${{ inputs.store-path }}" >> "$GITHUB_STEP_SUMMARY
+        echo "" >> "$GITHUB_STEP_SUMMARY"
+      
+        cat >> "$GITHUB_STEP_SUMMARY" <<EOF
+        |Store Path|NAR Size|Download Size|
+        |-|-|-|
+        EOF
+
+        nix path-info \
+            --json \
+            --recursive \
+            --store https://cantcache.me \
+            "${{ inputs.store-path }}" \
+          | jq -cr '.[] | "|\(.path)|\(.narSize)|\(.downloadSize)|"' \
+          | numfmt --delimiter "|" --field 3-4 --to iec-i --suffix B \
+          | tee -a "$GITHUB_STEP_SUMMARY"
+
+        echo "" >> "$GITHUB_STEP_SUMMARY"

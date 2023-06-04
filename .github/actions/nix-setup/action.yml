@@ -18,11 +18,15 @@ runs:
     - name: Get the home directory
       id: get-home
       shell: bash
-      run: echo "home=$HOME" >> "$GITHUB_OUTPUT"
+      run: |
+        echo "::group::Get the home directory"
+        echo "home=$HOME" | tee -a "$GITHUB_OUTPUT"
+        echo "::endgroup::"
 
     - name: Create cantcache.me binary cache S3 API credentials
       shell: bash
       run: |
+        echo "::group::Create cantcache.me binary cache S3 API credentials"
         mkdir -p "${{ steps.get-home.outputs.home }}/.aws"
         cat > "${{ steps.get-home.outputs.home }}/.aws/credentials" <<EOF
         [cant-cache-me]
@@ -33,13 +37,16 @@ runs:
         [cant-cache-me]
         region = us-east-1
         EOF
+        echo "::endgroup::"
 
     - name: Create Nix secret signing key
       shell: bash
       run: |
+        echo "::group::Create Nix secret signing key"
         mkdir -p "${{ steps.get-home.outputs.home }}/.config/nix"
         echo "${{ inputs.cant-cache-me-nix-secret-signing-key }}" \
           > "${{ steps.get-home.outputs.home }}/.config/nix/secret-signing-key.key"
+        echo "::endgroup::"
 
     - name: Install Nix
       uses: cachix/install-nix-action@v21
