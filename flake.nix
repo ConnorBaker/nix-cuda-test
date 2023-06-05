@@ -15,10 +15,6 @@
       url = "github:hercules-ci/flake-parts";
     };
     flake-utils.url = "github:numtide/flake-utils";
-    hercules-ci-effects = {
-      inputs.nixpkgs.follows = "nixpkgs";
-      url = "github:hercules-ci/hercules-ci-effects";
-    };
     nixGL = {
       inputs.nixpkgs.follows = "nixpkgs";
       url = "github:guibou/nixGL";
@@ -47,10 +43,7 @@
   outputs = inputs:
     inputs.flake-parts.lib.mkFlake {inherit inputs;} {
       systems = ["x86_64-linux"];
-      imports = [
-        ./nix
-        inputs.hercules-ci-effects.flakeModule
-      ];
+      imports = [./nix];
       perSystem = {pkgs, ...}: {
         config = {
           cudaCapabilities = ["8.9"];
@@ -59,6 +52,5 @@
           formatter = pkgs.alejandra;
         };
       };
-      herculesCI = {config, ...}: {};
     };
 }

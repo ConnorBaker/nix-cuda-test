@@ -7,8 +7,15 @@ defaults:
 on:
   workflow_dispatch:
     inputs:
+      action:
+        description: Action
+        required: true
+        type: choice
+        options:
+          - start
+          - terminate
       instance-type-name:
-        description: "The instance type."
+        description: Instance
         required: true
         type: choice
         options:
@@ -27,24 +34,45 @@ on:
           - gpu_8x_v100
 
 jobs:
-  ensure-lambda-vm-is-running:
-    name: Ensure Lambda VM is running
+  action-lambda-vm:
+    name: Lambda VM
     runs-on: ubuntu-latest
-    concurrency: ensure-lambda-vm-is-running-${{ inputs.instance-type-name }}
+    concurrency: lambda-vm-${{ inputs.instance-type-name }}
+    outputs:
+      ip: ${{ steps.action-lambda-vm.outputs.ip }}
     steps:
-      # Note: When using the empty list as an output, GitHub stores this as the empty string.
       - name: Checkouts
         uses: actions/checkout@v3
 
-      - name: Run python script
-        run: |
-          IP=$(
-            python3 ./.github/scripts/lambda_vm.py \
-              --key "${{ secrets.LAMBDA_CLOUD_RUNNER_API_KEY }}" \
-              --instance-type-name "${{ inputs.instance-type-name }}"
-          )
-          echo "ip=$IP" | tee -a "$GITHUB_OUTPUTS"
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+          cache: pip
 
+      - run: python3 -m pip install -U --pre -r requirements.txt
+        working-directory: ./.github/scripts/lambda_vm
+
+      - name: Run python script
+        id: action-lambda-vm
+        working-directory: ./.github/scripts
+        run: |
+          python3 -m lambda_vm \
+            --action "${{ inputs.action }}" \
+            --api-key "${{ secrets.LAMBDA_CLOUD_RUNNER_API_KEY }}" \
+            --instance-type-name "${{ inputs.instance-type-name }}" \
+          | sed -e 's/^/ip=/' \
+          | tee -a "$GITHUB_OUTPUT"
+
+  # TODO(@connorbaker): Add checks to make idempotent; although the first script will exit with an
+  # error if we attempt to set up a VM that already exists.
+  setup-lambda-vm:
+    name: Setup Lambda VM
+    runs-on: ubuntu-latest
+    needs: action-lambda-vm
+    if: ${{ inputs.action == 'start' }}
+    concurrency: lambda-vm-${{ inputs.instance-type-name }}
+    steps:
       - name: Set up the GitHub runner SSH keys
         run: |
           mkdir -p "$HOME/.ssh"
@@ -55,12 +83,68 @@ jobs:
           chmod 600 "$HOME/.ssh/ed25519.pub"
           cat >> "$HOME/.ssh/config" <<EOF
           Host vm
-            HostName ${{ inputs.instance-type-name }}
+            HostName ${{ needs.action-lambda-vm.outputs.ip }}
             User ubuntu
             IdentityFile $HOME/.ssh/ed25519
             StrictHostKeyChecking no
           EOF
           chmod 600 "$HOME/.ssh/config"
 
-      # TODO: Make it a self-hosted runner for GitHub actions to re-use some of the workflows we
-      # have here.
+      - name: Create a folder
+        run: ssh vm "mkdir actions-runner"
+
+      - name: Download the latest runner package
+        run: |
+          ssh vm <<EOF
+          cd actions-runner;
+          curl -o actions-runner-linux-x64-2.304.0.tar.gz \
+            -L "https://github.com/actions/runner/releases/download/v2.304.0/actions-runner-linux-x64-2.304.0.tar.gz"
+          EOF
+
+      - name: Validate the hash
+        run: |
+          ssh vm <<EOF
+          cd actions-runner;
+          echo '292e8770bdeafca135c2c06cd5426f9dda49a775568f45fcc25cc2b576afc12f  actions-runner-linux-x64-2.304.0.tar.gz' \
+            | shasum -a 256 -c
+          EOF
+
+      - name: Extract the installer
+        run: |
+          ssh vm <<EOF
+          cd actions-runner;
+          tar xzf ./actions-runner-linux-x64-2.304.0.tar.gz
+          EOF
+
+      - name: Generate an authentication token for the runner
+        id: self-hosted-runner-token
+        env:
+            GH_TOKEN: ${{ secrets.RUNNER_AUTH_TOKEN }}
+        run: |
+          gh api /repos/ConnorBaker/nix-cuda-test/actions/runners/registration-token \
+              --method POST \
+              -H "Accept: application/vnd.github+json" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+            | jq -cr '"token=\(.token)"' \
+            | tee -a "$GITHUB_OUTPUT"
+
+      - name: Configure the runner
+        run: |
+          ssh vm <<EOF
+          cd actions-runner;
+          ./config.sh \
+            --labels ${{ inputs.instance-type-name }} \
+            --name ${{ inputs.instance-type-name }} \
+            --token ${{ steps.self-hosted-runner-token.outputs.token }} \
+            --unattended \
+            --url https://github.com/ConnorBaker/nix-cuda-test
+          EOF
+
+      - name: Install the service
+        run: ssh vm "cd actions-runner && sudo ./svc.sh install"
+
+      - name: Start the service
+        run: ssh vm "cd actions-runner && sudo ./svc.sh start"
+
+      - name: Check the status of the service
+        run: ssh vm "cd actions-runner && sudo ./svc.sh status"

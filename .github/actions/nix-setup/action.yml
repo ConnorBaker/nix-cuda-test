@@ -18,37 +18,67 @@ runs:
     - name: Get the home directory
       id: get-home
       shell: bash
-      run: |
-        echo "::group::Get the home directory"
-        echo "home=$HOME" | tee -a "$GITHUB_OUTPUT"
-        echo "::endgroup::"
+      run: echo "home=$HOME" | tee -a "$GITHUB_OUTPUT"
 
-    - name: Create cantcache.me binary cache S3 API credentials
+    - name: Check if the aws credentials file exists
+      id: check-credentials-file
       shell: bash
       run: |
-        echo "::group::Create cantcache.me binary cache S3 API credentials"
-        mkdir -p "${{ steps.get-home.outputs.home }}/.aws"
-        cat > "${{ steps.get-home.outputs.home }}/.aws/credentials" <<EOF
+        [[ -f "${{ steps.get-home.outputs.home }}/.cantcache.me/credentials" ]] \
+          && echo "exists=true" \
+          || echo "exists=false" \
+          | tee -a "$GITHUB_OUTPUT"
+
+    - name: Update aws credentials file
+      if: ${{ steps.check-credentials-file.outputs.exists == 'false' }}
+      shell: bash
+      run: |
+        mkdir -p "${{ steps.get-home.outputs.home }}/.cantcache.me"
+        cat >> "${{ steps.get-home.outputs.home }}/.aws/credentials" <<EOF
         [cant-cache-me]
         aws_access_key_id = ${{ inputs.cloudflare-r2-access-key-id }}
         aws_secret_access_key = ${{ inputs.cloudflare-r2-secret-access-key }}
         EOF
-        cat > "${{ steps.get-home.outputs.home }}/.aws/config" <<EOF
+
+    - name: Check if the aws config file exists
+      id: check-config-file
+      shell: bash
+      run: |
+        [[ -f "${{ steps.get-home.outputs.home }}/.aws/config" ]] \
+          && echo "exists=true" \
+          || echo "exists=false" \
+          | tee -a "$GITHUB_OUTPUT"
+
+    - name: Update aws config file
+      if: ${{ steps.check-config-file.outputs.exists == 'false' }}
+      shell: bash
+      run: |
+        mkdir -p "${{ steps.get-home.outputs.home }}/.aws"
+        cat >> "${{ steps.get-home.outputs.home }}/.aws/config" <<EOF
         [cant-cache-me]
         region = us-east-1
         EOF
-        echo "::endgroup::"
 
-    - name: Create Nix secret signing key
+    - name: Check if the nix secret signing key file exists
+      id: check-secret-signing-key-file
       shell: bash
       run: |
-        echo "::group::Create Nix secret signing key"
+        [[ -f "${{ steps.get-home.outputs.home }}/.config/nix/secret-signing-key.key" ]] \
+          && echo "exists=true" \
+          || echo "exists=false" \
+          | tee -a "$GITHUB_OUTPUT"
+
+    - name: Create nix secret signing key file
+      if: ${{ steps.check-secret-signing-key-file.outputs.exists == 'false' }}
+      shell: bash
+      run: |
         mkdir -p "${{ steps.get-home.outputs.home }}/.config/nix"
-        echo "${{ inputs.cant-cache-me-nix-secret-signing-key }}" \
-          > "${{ steps.get-home.outputs.home }}/.config/nix/secret-signing-key.key"
-        echo "::endgroup::"
+        cat >> "${{ steps.get-home.outputs.home }}/.config/nix/secret-signing-key.key" <<EOF
+        ${{ inputs.cant-cache-me-nix-secret-signing-key }}
+        EOF
 
     - name: Install Nix
+      if: ${{ steps.check-secret-signing-key-file.outputs.exists == 'false' }}
       uses: cachix/install-nix-action@v21
       with:
         install_url: https://releases.nixos.org/nix/nix-2.16.0/install

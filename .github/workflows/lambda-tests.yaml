@@ -1,0 +1,52 @@
+name: Run Tests on Lambda VM
+
+defaults:
+  run:
+    shell: bash
+
+on:
+  workflow_dispatch:
+    inputs:
+      instance-type-name:
+        description: Instance
+        required: true
+        type: choice
+        options:
+          - gpu_1x_a10
+          - gpu_1x_a100
+          - gpu_1x_a100_sxm4
+          - gpu_1x_a6000
+          - gpu_1x_h100_pcie
+          - gpu_1x_rtx6000
+          - gpu_2x_a100
+          - gpu_2x_a6000
+          - gpu_4x_a100
+          - gpu_4x_a6000
+          - gpu_8x_a100
+          - gpu_8x_a100_80gb_sxm4
+          - gpu_8x_v100
+
+jobs:
+  lambda-vm-tests:
+    name: Test on Lambda VM
+    runs-on: ${{ inputs.instance-type-name }}
+    concurrency: lambda-vm-test-${{ inputs.instance-type-name }}
+    strategy:
+      fail-fast: false
+      matrix:
+        attribute:
+          - torch-collect-env
+      max-parallel: 1
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Set up Nix
+        uses: ./.github/actions/nix-setup
+        with:
+          cant-cache-me-nix-secret-signing-key: ${{ secrets.CANT_CACHE_ME_NIX_SECRET_SIGNING_KEY }}
+          cloudflare-r2-access-key-id: ${{ secrets.CLOUDFLARE_R2_ACCESS_KEY_ID }}
+          cloudflare-r2-secret-access-key: ${{ secrets.CLOUDFLARE_R2_SECRET_ACCESS_KEY }}
+      
+      - name: Run ${{ matrix.attribute }}}
+        run: nix run --print-build-logs .#${{ matrix.attribute }}

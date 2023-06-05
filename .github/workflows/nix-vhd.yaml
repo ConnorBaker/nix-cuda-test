@@ -5,9 +5,10 @@ defaults:
     shell: bash
 
 on:
-  push:
-    branches:
-      - main
+  # push:
+  #   branches:
+  #     - main
+  workflow_dispatch:
 
 jobs:
   ensure-nixos-azure-vhd-is-cached:

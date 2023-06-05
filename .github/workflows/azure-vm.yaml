@@ -7,15 +7,18 @@ defaults:
 on:
   workflow_dispatch:
     inputs:
-      vhd-name:
-        description: The VHD name. Default is to use the name corresponding to the current commit. Equivalent to the store entry -- that is, the store path without the `/nix/store/` prefix.
-        default: ""
-        required: false
-        type: string
+      # TODO: Implement the ability to stop it
+      # action:
+      #   description: Action
+      #   required: true
+      #   type: choice
+      #   options:
+      #     - start
+      #     - terminate
       size:
-        description: The instance size.
+        description: Instance
+        required: false
         default: Standard_HB120rs_v3
-        required: true
         type: choice
         # All numbers are for spot instances in East US as of 2023-06-03.
         # Standard_HB120rs_v3:
@@ -40,8 +43,9 @@ on:
         # - $1.28/hour
         options:
           - Standard_HB120rs_v3
-          - Standard_NC8as_T4_v3
-          - Standard_NV36ads_A10_v5
+          # - Standard_NC8as_T4_v3
+          # - Standard_NV36ads_A10_v5
+
 
 jobs:
   get-vhd-name:
@@ -51,11 +55,9 @@ jobs:
       vhd-name: ${{ steps.get-vhd-name.outputs.vhd-name }}
     steps:
       - name: Checkout
-        if: ${{ inputs.vhd-name == "" }}
         uses: actions/checkout@v3
 
       - name: Set up Nix
-        if: ${{ inputs.vhd-name == "" }}
         uses: ./.github/actions/nix-setup
         with:
           cant-cache-me-nix-secret-signing-key: ${{ secrets.CANT_CACHE_ME_NIX_SECRET_SIGNING_KEY }}
@@ -65,13 +67,9 @@ jobs:
       - name: Get the VHD name
         id: get-vhd-name
         run: |
-          if [[ -z "${{ inputs.vhd-name }}" ]]; then
-            nix eval --raw .#nixosConfigurations.azure.outPath \
-              | sed 's|/nix/store/|vhd-name=|' \
-              >> "$GITHUB_OUTPUTS"
-          else
-            echo "vhd-name=${{ inputs.vhd-name }}" >> "$GITHUB_OUTPUTS"
-          fi
+          nix eval --raw .#nixosConfigurations.azure.outPath \
+            | sed 's|/nix/store/|vhd-name=|' \
+            | tee -a "$GITHUB_OUTPUT"
 
   ensure-nixos-azure-vhd-blob-exists:
     name: Ensure NixOS Azure VHD blob exists
@@ -185,19 +183,14 @@ jobs:
       - name: Check if VMs are running
         id: check-vm-running
         run: |
-          echo "::group::Get VMs"
           VMS=$(az vm list --resource-group "${{ secrets.AZURE_RESOURCE_GROUP }}")
           echo "$VMS" | jq
-          echo "::endgroup::"
-          echo "::group::Filter VMs by name"
+
           MATCHING_VMS=$(echo "$VMS" | jq -cr --arg name "${{ env.VHD_NAME }}" 'map(select(.name == $name))')
           echo "$MATCHING_VMS" | jq
-          echo "::endgroup::"
-          echo "::group::Get number of matching VMs"
+
           NUM_MATCHING_VMS=$(echo "$MATCHING_VMS" | jq -cr length)
           echo "Number of matching VMs: $NUM_MATCHING_VMS"
-          echo "::endgroup::"
-          echo "::group::Switch on the number of matching VMs"
           case $NUM_MATCHING_VMS in
             0)
               echo "vm-running=false" >> "$GITHUB_OUTPUT"
@@ -211,7 +204,6 @@ jobs:
               exit 1
               ;;
           esac
-          echo "::endgroup::"
 
       - name: Get the VHD blob URL
         id: get-vhd-blob-url
@@ -220,7 +212,8 @@ jobs:
           az storage blob url \
               --container-name "${{ secrets.AZURE_STORAGE_CONTAINER }}" \
               --name "${{ env.VHD_NAME }}.vhd" \
-            | jq -cr '"vhd-blob-url=\(.)"' >> "$GITHUB_OUTPUT"
+            | jq -cr '"vhd-blob-url=\(.)"' \
+            | tee -a "$GITHUB_OUTPUT"
 
       # TODO(@connorbaker): Allow multiple VMs to be created.
       - name: Create the VM
@@ -255,7 +248,8 @@ jobs:
               --name "${{ env.VHD_NAME }}" \
               --resource-group "${{ secrets.AZURE_RESOURCE_GROUP }}" \
               --show-details \
-            | jq -cr '"public-ip-address=\(.publicIps)"' >> "$GITHUB_OUTPUT"
+            | jq -cr '"public-ip-address=\(.publicIps)"' \
+            | tee -a "$GITHUB_OUTPUT"
 
   # TODO(@connorbaker): Refactor to allow setting up multiple VMs.
   ensure-nixos-azure-vm-hercules-ci-configured:
@@ -286,8 +280,9 @@ jobs:
         id: hercules-ci-agent-active
         run: |
           ssh vm "sudo systemctl is-active --quiet hercules-ci-agent.service" \
-            && echo "active=true" >> "$GITHUB_OUTPUT" \
-            || echo "active=false" >> "$GITHUB_OUTPUT"
+            && echo "active=true" \
+            || echo "active=false" \
+            | tee -a "$GITHUB_OUTPUT"
 
       - name: Stop the agent
         if: ${{ steps.hercules-ci-agent-active.outputs.active == 'false' }}
@@ -323,8 +318,10 @@ jobs:
       - name: Fix permissions on the agent secrets directory
         if: ${{ steps.hercules-ci-agent-active.outputs.active == 'false' }}
         run: |
-          ssh vm "sudo chown -R hercules-ci-agent /var/lib/hercules-ci-agent"
-          ssh vm "sudo chmod o-rwx /var/lib/hercules-ci-agent/secrets"
+          ssh vm <<EOF
+          sudo chown -R hercules-ci-agent /var/lib/hercules-ci-agent
+          sudo chmod o-rwx /var/lib/hercules-ci-agent/secrets
+          EOF
 
       - name: Start the agent
         if: ${{ steps.hercules-ci-agent-active.outputs.active == 'false' }}
