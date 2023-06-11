@@ -24,7 +24,7 @@ runs:
       id: check-credentials-file
       shell: bash
       run: |
-        [[ -f "${{ steps.get-home.outputs.home }}/.cantcache.me/credentials" ]] \
+        [[ -f "${{ steps.get-home.outputs.home }}/.aws/credentials" ]] \
           && echo "exists=true" \
           || echo "exists=false" \
           | tee -a "$GITHUB_OUTPUT"
@@ -33,7 +33,7 @@ runs:
       if: ${{ steps.check-credentials-file.outputs.exists == 'false' }}
       shell: bash
       run: |
-        mkdir -p "${{ steps.get-home.outputs.home }}/.cantcache.me"
+        mkdir -p "${{ steps.get-home.outputs.home }}/.aws"
         cat >> "${{ steps.get-home.outputs.home }}/.aws/credentials" <<EOF
         [cant-cache-me]
         aws_access_key_id = ${{ inputs.cloudflare-r2-access-key-id }}
