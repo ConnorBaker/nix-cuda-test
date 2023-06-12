@@ -27,7 +27,7 @@
       ];
     };
   in {
-    "/nix/store" =
+    "/nested/disk0" =
       {
         device = "/dev/nvme0n1";
       }
