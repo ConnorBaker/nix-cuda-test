@@ -12,19 +12,20 @@
       compressor = "zstd";
       compressorArgs = ["-19"];
       kernelModules = ["nvme"];
-      # TODO: Check out services.swraid.mdadmConf;
     };
-    kernelPackages = pkgs.linuxPackages_latest;
+    # kernelPackages = pkgs.linuxPackages_latest;
     kernelParams = ["nvme_core.io_timeout=4294967295"];
+    supportedFilesystems = ["bcachefs"];
   };
 
   environment.memoryAllocator.provider = "mimalloc";
 
-  fileSystems = let
-    defaults = {
+  fileSystems = {
+    "/" = lib.mkForce {
       autoFormat = true;
       autoResize = true;
-      fsType = "ext4";
+      device = "/dev/sda:/dev/sdb:/dev/nvme0n1:/dev/nvme1n1";
+      fsType = "bcachefs";
       options = [
         "defaults"
         "nofail"
@@ -33,27 +34,6 @@
         "x-systemd.mount-timeout=2min"
       ];
     };
-  in {
-    # "/" = lib.mkForce {
-    #   device = "none";
-    #   fsType = "tmpfs";
-    #   options = ["size=3G" "mode=755"];
-    # };
-    "/home/connorbaker" = {
-      device = "none";
-      fsType = "tmpfs";
-      options = ["size=4G" "mode=777"];
-    };
-    "/nix" =
-      {
-        device = "/dev/nvme0n1";
-      }
-      // defaults;
-    "/nested/disk1" =
-      {
-        device = "/dev/nvme1n1";
-      }
-      // defaults;
   };
 
   networking = {
