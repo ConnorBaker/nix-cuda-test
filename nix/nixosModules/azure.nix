@@ -1,4 +1,9 @@
-{modulesPath, ...}: {
+{
+  lib,
+  modulesPath,
+  pkgs,
+  ...
+}: {
   imports = ["${modulesPath}/virtualisation/azure-common.nix"];
   system.stateVersion = "23.05";
 
@@ -9,6 +14,7 @@
       kernelModules = ["nvme"];
       # TODO: Check out services.swraid.mdadmConf;
     };
+    kernelPackages = pkgs.linuxPackages_latest;
     kernelParams = ["nvme_core.io_timeout=4294967295"];
   };
 
@@ -17,6 +23,7 @@
   fileSystems = let
     defaults = {
       autoFormat = true;
+      autoResize = true;
       fsType = "ext4";
       options = [
         "defaults"
@@ -27,12 +34,21 @@
       ];
     };
   in {
-    "/nested/disk0" =
+    "/" = lib.mkForce {
+      device = "none";
+      fsType = "tmpfs";
+      options = ["size=3G" "mode=755"];
+    };
+    "/home/connorbaker" = {
+      device = "none";
+      fsType = "tmpfs";
+      options = ["size=4G" "mode=777"];
+    };
+    "/nix" =
       {
         device = "/dev/nvme0n1";
       }
       // defaults;
-
     "/nested/disk1" =
       {
         device = "/dev/nvme1n1";
