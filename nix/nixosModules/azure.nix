@@ -23,7 +23,6 @@
   fileSystems = {
     "/" = lib.mkForce {
       autoFormat = true;
-      autoResize = true;
       device = "/dev/sda:/dev/sdb:/dev/nvme0n1:/dev/nvme1n1";
       fsType = "bcachefs";
       options = [
