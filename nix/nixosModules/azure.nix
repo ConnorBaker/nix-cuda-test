@@ -27,13 +27,13 @@
       ];
     };
   in {
-    "/disk0" =
+    "/nix/store" =
       {
         device = "/dev/nvme0n1";
       }
       // defaults;
 
-    "/disk1" =
+    "/nested/disk1" =
       {
         device = "/dev/nvme1n1";
       }
