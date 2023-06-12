@@ -44,11 +44,11 @@
       fsType = "tmpfs";
       options = ["size=4G" "mode=777"];
     };
-    "/nix" =
-      {
-        device = "/dev/nvme0n1";
-      }
-      // defaults;
+    # "/nix" =
+    #   {
+    #     device = "/dev/nvme0n1";
+    #   }
+    #   // defaults;
     "/nested/disk1" =
       {
         device = "/dev/nvme1n1";
