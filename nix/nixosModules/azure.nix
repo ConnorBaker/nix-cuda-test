@@ -1,14 +1,9 @@
-{
-  modulesPath,
-  pkgs,
-  ...
-}: {
+{modulesPath, ...}: {
   imports = ["${modulesPath}/virtualisation/azure-common.nix"];
   system.stateVersion = "23.05";
 
   boot = {
     initrd = {
-      availableKernelModules = ["nvme"];
       compressor = "zstd";
       compressorArgs = ["-19"];
       kernelModules = ["nvme"];
@@ -19,31 +14,31 @@
 
   environment.memoryAllocator.provider = "mimalloc";
 
-  # fileSystems = let
-  #   defaults = {
-  #     autoFormat = true;
-  #     fsType = "ext4";
-  #     options = [
-  #       "defaults"
-  #       "noatime"
-  #       "noauto"
-  #       "user"
-  #       "X-mount.mkdir"
-  #     ];
-  #   };
-  # in {
-  #   "/mnt/disk0" =
-  #     {
-  #       device = "/dev/nvme0n1";
-  #     }
-  #     // defaults;
+  fileSystems = let
+    defaults = {
+      autoFormat = true;
+      fsType = "ext4";
+      options = [
+        "defaults"
+        "nofail"
+        "X-mount.mkdir"
+        "x-systemd.device-timeout=2min"
+        "x-systemd.mount-timeout=2min"
+      ];
+    };
+  in {
+    "/disk0" =
+      {
+        device = "/dev/nvme0n1";
+      }
+      // defaults;
 
-  #   "/mnt/disk1" =
-  #     {
-  #       device = "/dev/nvme1n1";
-  #     }
-  #     // defaults;
-  # };
+    "/disk1" =
+      {
+        device = "/dev/nvme1n1";
+      }
+      // defaults;
+  };
 
   networking = {
     hostName = "nixos-builder";
@@ -71,7 +66,6 @@
         "cantcache.me:Y+FHAKfx7S0pBkBMKpNMQtGKpILAfhmqUSnr5oNwNMs="
         "cuda-maintainers.cachix.org-1:0dq3bujKpuEPMCX6U4WylrUDZ9JyUG0VpVZa7CNfq5E="
       ];
-      extra-trusted-users = ["@nixbld" "@wheel" "connorbaker" "runner"];
       fsync-metadata = false;
       http-connections = 0;
       keep-derivations = true;
@@ -85,6 +79,7 @@
         "kvm"
         "nixos-test"
       ];
+      trusted-users = ["root" "@nixbld" "@wheel" "connorbaker" "runner"];
     };
   };
 
@@ -122,53 +117,6 @@
       allowSFTP = false;
       enable = true;
       settings.PasswordAuthentication = false;
-    };
-  };
-
-  systemd.services = let
-    mount-nvme-script = device: mountPoint: ''
-      #!/usr/bin/env bash
-      set -euo pipefail
-
-      # Check if the drive is already mounted
-      if mountpoint -q ${mountPoint}; then
-        echo "Drive already mounted, exiting..."
-        exit 0
-      fi
-      echo "Drive not mounted, continuing..."
-
-      # Check if the drive is already formatted
-      if blkid ${device}; then
-        echo "Drive already formatted, continuing..."
-      else
-        echo "Drive not formatted, formatting..."
-        mkfs.ext4 ${device}
-      fi
-
-      # Check if the mount point exists
-      if [ -d ${mountPoint} ]; then
-        echo "Mount point exists, continuing..."
-      else
-        echo "Mount point does not exist, creating..."
-        mkdir -p ${mountPoint}
-      fi
-
-      # Mount the drive
-      echo "Mounting drive..."
-      mount ${device} ${mountPoint}
-    '';
-  in {
-    mount-nvme0n1 = {
-      description = "Mount the first NVMe drive";
-      path = with pkgs; [e2fsprogs util-linux];
-      script = mount-nvme-script "/dev/nvme0n1" "/mnt/disk0";
-      wantedBy = ["multi-user.target"];
-    };
-    mount-nvme1n1 = {
-      description = "Mount the second NVMe drive";
-      path = with pkgs; [e2fsprogs util-linux];
-      script = mount-nvme-script "/dev/nvme1n1" "/mnt/disk1";
-      wantedBy = ["multi-user.target"];
     };
   };
 

@@ -100,10 +100,10 @@ jobs:
               --container-name "${{ secrets.AZURE_STORAGE_CONTAINER }}" \
               --name "${{ env.VHD_NAME }}.vhd" \
             | jq -cr '"vhd-blob-exists=\(.exists)"' \
-            >> "$GITHUB_OUTPUT"
+            | tee -a "$GITHUB_OUTPUT"
 
       - name: Restore the VHD from GitHub Actions' cache
-        if: ${{ steps.check-vhd-blob-exists.outputs.vhd-blob-exists == 'false' }}
+        if: ${{ steps.check-vhd-blob-exists.outputs.vhd-blob-exists != 'true' }}
         id: restore-vhd
         uses: actions/cache/restore@v3
         with:
@@ -111,11 +111,11 @@ jobs:
           path: ./result/disk.vhd
 
       - name: Checkout
-        if: ${{ steps.restore-vhd.outputs.cache-hit == 'false' }}
+        if: ${{ steps.restore-vhd.outputs.cache-hit != 'true' }}
         uses: actions/checkout@v3
 
       - name: Set up Nix
-        if: ${{ steps.restore-vhd.outputs.cache-hit == 'false' }}
+        if: ${{ steps.restore-vhd.outputs.cache-hit != 'true' }}
         uses: ./.github/actions/nix-setup
         with:
           cant-cache-me-nix-secret-signing-key: ${{ secrets.CANT_CACHE_ME_NIX_SECRET_SIGNING_KEY }}
@@ -123,7 +123,7 @@ jobs:
           cloudflare-r2-secret-access-key: ${{ secrets.CLOUDFLARE_R2_SECRET_ACCESS_KEY }}
 
       - name: Download the NAR for the VHD
-        if: ${{ steps.restore-vhd.outputs.cache-hit == 'false' }}
+        if: ${{ steps.restore-vhd.outputs.cache-hit != 'true' }}
         run: |
           nix store dump-path -v \
               --store https://cantcache.me \
@@ -131,21 +131,21 @@ jobs:
             > "./${{ env.VHD_NAME }}.nar"
 
       - name: Extract the VHD from the NAR
-        if: ${{ steps.restore-vhd.outputs.cache-hit == 'false' }}
+        if: ${{ steps.restore-vhd.outputs.cache-hit != 'true' }}
         run: |
           mkdir "./result"
           nix nar cat -v "./${{ env.VHD_NAME }}.nar" /disk.vhd \
             > "./result/disk.vhd"
 
       - name: Copy the VHD to GitHub Actions' cache
-        if: ${{ steps.restore-vhd.outputs.cache-hit == 'false' }}
+        if: ${{ steps.restore-vhd.outputs.cache-hit != 'true' }}
         uses: actions/cache/save@v3
         with:
           key: ${{ env.VHD_NAME }}
           path: ./result/disk.vhd
 
       - name: Upload the VHD to an Azure blob
-        if: ${{ steps.check-vhd-blob-exists.outputs.vhd-blob-exists == 'false' }}
+        if: ${{ steps.check-vhd-blob-exists.outputs.vhd-blob-exists != 'true' }}
         run: |
           az storage blob upload \
             --container-name "${{ secrets.AZURE_STORAGE_CONTAINER }}" \
@@ -207,7 +207,7 @@ jobs:
 
       - name: Get the VHD blob URL
         id: get-vhd-blob-url
-        if: ${{ steps.check-vm-running.outputs.vm-running == 'false' }}
+        if: ${{ steps.check-vm-running.outputs.vm-running != 'true' }}
         run: |
           az storage blob url \
               --container-name "${{ secrets.AZURE_STORAGE_CONTAINER }}" \
@@ -217,7 +217,7 @@ jobs:
 
       # TODO(@connorbaker): Allow multiple VMs to be created.
       - name: Create the VM
-        if: ${{ steps.check-vm-running.outputs.vm-running == 'false' }}
+        if: ${{ steps.check-vm-running.outputs.vm-running != 'true' }}
         run: |
           az vm create \
               --attach-os-disk "${{ steps.get-vhd-blob-url.outputs.vhd-blob-url }}" \
@@ -234,7 +234,7 @@ jobs:
               --use-unmanaged-disk
 
       - name: Wait for the VM to be created
-        if: ${{ steps.check-vm-running.outputs.vm-running == 'false' }}
+        if: ${{ steps.check-vm-running.outputs.vm-running != 'true' }}
         run: |
           az vm wait \
             --created \
@@ -285,15 +285,15 @@ jobs:
             | tee -a "$GITHUB_OUTPUT"
 
       - name: Stop the agent
-        if: ${{ steps.hercules-ci-agent-active.outputs.active == 'false' }}
+        if: ${{ steps.hercules-ci-agent-active.outputs.active != 'true' }}
         run: ssh vm "sudo systemctl stop hercules-ci-agent.service"
 
       - name: Create the agent secrets directory
-        if: ${{ steps.hercules-ci-agent-active.outputs.active == 'false' }}
+        if: ${{ steps.hercules-ci-agent-active.outputs.active != 'true' }}
         run: ssh vm "sudo mkdir -p /var/lib/hercules-ci-agent/secrets"
 
       - name: Create the agent binary-caches secret
-        if: ${{ steps.hercules-ci-agent-active.outputs.active == 'false' }}
+        if: ${{ steps.hercules-ci-agent-active.outputs.active != 'true' }}
         run: |
           echo '{
             "cantcache.me": {
@@ -310,13 +310,13 @@ jobs:
             | ssh vm "sudo tee /var/lib/hercules-ci-agent/secrets/binary-caches.json"
 
       - name: Create the agent cluster join token secret
-        if: ${{ steps.hercules-ci-agent-active.outputs.active == 'false' }}
+        if: ${{ steps.hercules-ci-agent-active.outputs.active != 'true' }}
         run: |
           echo "${{ secrets.HERCULES_CI_CLUSTER_JOIN_TOKEN }}" \
             | ssh vm "sudo tee /var/lib/hercules-ci-agent/secrets/cluster-join-token.key"
 
       - name: Fix permissions on the agent secrets directory
-        if: ${{ steps.hercules-ci-agent-active.outputs.active == 'false' }}
+        if: ${{ steps.hercules-ci-agent-active.outputs.active != 'true' }}
         run: |
           ssh vm <<EOF
           sudo chown -R hercules-ci-agent /var/lib/hercules-ci-agent
@@ -324,5 +324,5 @@ jobs:
           EOF
 
       - name: Start the agent
-        if: ${{ steps.hercules-ci-agent-active.outputs.active == 'false' }}
+        if: ${{ steps.hercules-ci-agent-active.outputs.active != 'true' }}
         run: ssh vm "sudo systemctl start hercules-ci-agent.service"

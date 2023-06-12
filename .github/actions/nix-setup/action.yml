@@ -30,7 +30,7 @@ runs:
           | tee -a "$GITHUB_OUTPUT"
 
     - name: Update aws credentials file
-      if: ${{ steps.check-credentials-file.outputs.exists == 'false' }}
+      if: ${{ steps.check-credentials-file.outputs.exists != 'true' }}
       shell: bash
       run: |
         mkdir -p "${{ steps.get-home.outputs.home }}/.aws"
@@ -50,7 +50,7 @@ runs:
           | tee -a "$GITHUB_OUTPUT"
 
     - name: Update aws config file
-      if: ${{ steps.check-config-file.outputs.exists == 'false' }}
+      if: ${{ steps.check-config-file.outputs.exists != 'true' }}
       shell: bash
       run: |
         mkdir -p "${{ steps.get-home.outputs.home }}/.aws"
@@ -69,7 +69,7 @@ runs:
           | tee -a "$GITHUB_OUTPUT"
 
     - name: Create nix secret signing key file
-      if: ${{ steps.check-secret-signing-key-file.outputs.exists == 'false' }}
+      if: ${{ steps.check-secret-signing-key-file.outputs.exists != 'true' }}
       shell: bash
       run: |
         mkdir -p "${{ steps.get-home.outputs.home }}/.config/nix"
@@ -78,7 +78,7 @@ runs:
         EOF
 
     - name: Install Nix
-      if: ${{ steps.check-secret-signing-key-file.outputs.exists == 'false' }}
+      if: ${{ steps.check-secret-signing-key-file.outputs.exists != 'true' }}
       uses: cachix/install-nix-action@v21
       with:
         install_url: https://releases.nixos.org/nix/nix-2.16.0/install
@@ -88,7 +88,6 @@ runs:
           cores = 0
           experimental-features = flakes nix-command no-url-literals
           extra-substituters = https://cantcache.me https://cuda-maintainers.cachix.org
-          extra-trusted-users = @nixbld @wheel runner ${{ github.actor }}
           extra-trusted-public-keys = cantcache.me:Y+FHAKfx7S0pBkBMKpNMQtGKpILAfhmqUSnr5oNwNMs= cuda-maintainers.cachix.org-1:0dq3bujKpuEPMCX6U4WylrUDZ9JyUG0VpVZa7CNfq5E=
           fsync-metadata = false # for performance
           http-connections = 0
@@ -99,3 +98,4 @@ runs:
           narinfo-cache-negative-ttl = 0
           secret-key-files = ${{ steps.get-home.outputs.home }}/.config/nix/secret-signing-key.key
           system-features = nixos-test benchmark big-parallel kvm
+          trusted-users = ["root" "@nixbld" "@wheel" "connorbaker" "runner"];
