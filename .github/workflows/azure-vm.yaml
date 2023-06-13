@@ -221,11 +221,14 @@ jobs:
         run: |
           az vm create \
               --attach-os-disk "${{ steps.get-vhd-blob-url.outputs.vhd-blob-url }}" \
+              --ephemeral-os-disk true \
+              --ephemeral-os-disk-placement CacheDisk \
               --eviction-policy Delete \
               --location eastus \
               --max-price 1.0 \
               --name "${{ env.VHD_NAME }}" \
               --nic-delete-option Delete \
+              --os-disk-caching ReadOnly \
               --os-type linux \
               --priority Spot \
               --public-ip-address-allocation dynamic \

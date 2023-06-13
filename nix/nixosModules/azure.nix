@@ -1,5 +1,4 @@
 {
-  lib,
   modulesPath,
   pkgs,
   ...
@@ -13,18 +12,15 @@
       compressorArgs = ["-19"];
       kernelModules = ["nvme"];
     };
-    # kernelPackages = pkgs.linuxPackages_latest;
-    kernelParams = ["nvme_core.io_timeout=4294967295"];
-    supportedFilesystems = ["bcachefs"];
+    kernelPackages = pkgs.linuxPackages_latest;
   };
 
   environment.memoryAllocator.provider = "mimalloc";
 
-  fileSystems = {
-    "/" = lib.mkForce {
+  fileSystems = let
+    defaults = {
       autoFormat = true;
-      device = "/dev/sda:/dev/sdb:/dev/nvme0n1:/dev/nvme1n1";
-      fsType = "bcachefs";
+      fsType = "ext4";
       options = [
         "defaults"
         "nofail"
@@ -33,6 +29,18 @@
         "x-systemd.mount-timeout=2min"
       ];
     };
+  in {
+    "/nested/disk0" =
+      {
+        device = "/dev/nvme0n1";
+      }
+      // defaults;
+
+    "/nested/disk1" =
+      {
+        device = "/dev/nvme1n1";
+      }
+      // defaults;
   };
 
   networking = {
@@ -66,7 +74,7 @@
       keep-derivations = true;
       keep-outputs = true;
       max-jobs = "auto";
-      max-substitution-jobs = 256;
+      max-substitution-jobs = 1024;
       narinfo-cache-negative-ttl = 0;
       system-features = [
         "benchmark"
