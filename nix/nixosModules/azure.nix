@@ -13,6 +13,7 @@
       kernelModules = ["nvme"];
     };
     kernelPackages = pkgs.linuxPackages_latest;
+    tmp.cleanOnBoot = true;
   };
 
   environment.memoryAllocator.provider = "mimalloc";
@@ -20,27 +21,30 @@
   fileSystems = let
     defaults = {
       autoFormat = true;
-      fsType = "ext4";
+      fsType = "overlay-ext4";
       options = [
         "defaults"
         "nofail"
         "X-mount.mkdir"
         "x-systemd.device-timeout=2min"
         "x-systemd.mount-timeout=2min"
+        "lowerdir=/nix/store"
+        "upperdir=/nix/store-host/upper"
+        "workdir=/nix/store-host/workdir/nix/store"
       ];
     };
   in {
-    "/nested/disk0" =
+    "/nix/store-host" =
       {
         device = "/dev/nvme0n1";
       }
       // defaults;
 
-    "/nested/disk1" =
-      {
-        device = "/dev/nvme1n1";
-      }
-      // defaults;
+    # "/nix/store-host/workdir" =
+    #   {
+    #     device = "/dev/nvme1n1";
+    #   }
+    #   // defaults;
   };
 
   networking = {
@@ -89,7 +93,7 @@
   nixpkgs = {
     config = {
       allowUnfree = true;
-      cudaCapabilities = ["8.6"];
+      # Use the default cudaCapabilities
       cudaSupport = true;
     };
     overlays = [
