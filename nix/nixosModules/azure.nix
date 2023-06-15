@@ -131,19 +131,18 @@
       + ''
         mkfs.ext4 -L nixos-store /dev/ext_vg/ext_lv
       ''
-      # Create and mount the mount point
+      # Create and mount the mount points with overlayfs
       + ''
         mkdir -p /ext
         mount /dev/ext_vg/ext_lv /ext
-        mkdir -p /ext/{upper,work}dir
-      ''
-      # Mount the overlayfs
-      + ''
-        mount \
-          -t overlay \
-          -o lowerdir=/nix/store,upperdir=/ext/upperdir,workdir=/ext/workdir \
-          none \
-          /nix/store
+        for dir in home nix tmp var; do
+          mkdir -p /ext/$dir/{upper,work}dir
+          mount \
+            -t overlay \
+            -o lowerdir=/$dir,upperdir=/ext/$dir/upperdir,workdir=/ext/$dir/workdir \
+            none \
+            /$dir
+        done
       '';
       serviceConfig = {
         RemainAfterExit = "yes";
