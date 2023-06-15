@@ -8,17 +8,16 @@ on:
   workflow_dispatch:
     inputs:
       # TODO: Implement the ability to stop it
-      # action:
-      #   description: Action
-      #   required: true
-      #   type: choice
-      #   options:
-      #     - start
-      #     - terminate
+      action:
+        description: Action
+        required: true
+        type: choice
+        options:
+          - start
+          - terminate
       size:
         description: Instance
-        required: false
-        default: Standard_HB120rs_v3
+        required: true
         type: choice
         # All numbers are for spot instances in East US as of 2023-06-03.
         # Standard_HB120rs_v3:
@@ -45,7 +44,6 @@ on:
           - Standard_HB120rs_v3
           # - Standard_NC8as_T4_v3
           # - Standard_NV36ads_A10_v5
-
 
 jobs:
   get-vhd-name:
@@ -74,6 +72,7 @@ jobs:
   ensure-nixos-azure-vhd-blob-exists:
     name: Ensure NixOS Azure VHD blob exists
     runs-on: ubuntu-latest
+    if: ${{ inputs.action == 'start' }}
     needs: get-vhd-name
     outputs:
       vhd-name: ${{ needs.get-vhd-name.outputs.vhd-name }}
@@ -179,6 +178,7 @@ jobs:
   ensure-nixos-azure-vm-is-running:
     name: Ensure NixOS Azure VM is running
     needs: ensure-nixos-azure-vhd-blob-exists
+    if: ${{ inputs.action == 'start' }}
     runs-on: ubuntu-latest
     env:
       AZURE_STORAGE_ACCOUNT: ${{ secrets.AZURE_STORAGE_ACCOUNT }}
@@ -227,7 +227,9 @@ jobs:
 
       - name: Get the VHD blob URL
         id: get-vhd-blob-url
-        if: ${{ steps.check-vm-running.outputs.vm-running != 'true' }}
+        env:
+          VM_RUNNING: ${{ steps.check-vm-running.outputs.vm-running }}
+        if: ${{ env.VM_RUNNING != 'true' }}
         run: |
           az storage blob url \
               --container-name "${{ secrets.AZURE_STORAGE_CONTAINER }}" \
@@ -237,24 +239,31 @@ jobs:
 
       # TODO(@connorbaker): Allow multiple VMs to be created.
       - name: Create the VM
-        if: ${{ steps.check-vm-running.outputs.vm-running != 'true' }}
+        env:
+          VHD_BLOB_URL: ${{ steps.get-vhd-blob-url.outputs.vhd-blob-url }}
+          VM_RUNNING: ${{ steps.check-vm-running.outputs.vm-running }}
+        if: ${{ env.VM_RUNNING != 'true' }}
         run: |
           az vm create \
-              --attach-os-disk "${{ steps.get-vhd-blob-url.outputs.vhd-blob-url }}" \
-              --eviction-policy Delete \
-              --location eastus \
-              --max-price 1.0 \
-              --name "${{ env.VHD_NAME }}" \
-              --nic-delete-option Delete \
-              --os-type linux \
-              --priority Spot \
-              --public-ip-address-allocation dynamic \
-              --resource-group "${{ secrets.AZURE_RESOURCE_GROUP }}" \
-              --size "${{ inputs.size }}" \
-              --use-unmanaged-disk
+            --attach-os-disk "${{ env.VHD_BLOB_URL }}" \
+            --enable-hibernation false \
+            --enable-hotpatching false \
+            --eviction-policy Delete \
+            --location eastus \
+            --max-price 1.0 \
+            --name "${{ env.VHD_NAME }}" \
+            --nic-delete-option Detach \
+            --os-type linux \
+            --priority Spot \
+            --public-ip-address-allocation dynamic \
+            --resource-group "${{ secrets.AZURE_RESOURCE_GROUP }}" \
+            --size "${{ inputs.size }}" \
+            --use-unmanaged-disk
 
       - name: Wait for the VM to be created
-        if: ${{ steps.check-vm-running.outputs.vm-running != 'true' }}
+        env:
+          VM_RUNNING: ${{ steps.check-vm-running.outputs.vm-running }}
+        if: ${{ env.VM_RUNNING != 'true' }}
         run: |
           az vm wait \
             --created \
@@ -275,6 +284,7 @@ jobs:
   ensure-nixos-azure-vm-hercules-ci-configured:
     name: Ensure NixOS Azure VM has Hercules CI configured
     runs-on: ubuntu-latest
+    if: ${{ inputs.action == 'start' }}
     needs: ensure-nixos-azure-vm-is-running
     env:
       AZURE_VM_IP: ${{ needs.ensure-nixos-azure-vm-is-running.outputs.public-ip-address }}
@@ -299,22 +309,28 @@ jobs:
       - name: Check if the agent is active (and so configured) with a timeout of 10 minutes
         id: hercules-ci-agent-active
         run: |
-          ssh vm -o ConnectTimeout=600 \
+          ssh -o ConnectTimeout=600 vm \
               "sudo systemctl is-active --quiet hercules-ci-agent.service" \
             && echo "active=true" \
             || echo "active=false" \
             | tee -a "$GITHUB_OUTPUT"
 
       - name: Stop the agent
-        if: ${{ steps.hercules-ci-agent-active.outputs.active != 'true' }}
+        env:
+          ACTIVE: ${{ steps.hercules-ci-agent-active.outputs.active }}
+        if: ${{ env.ACTIVE != 'true' }}
         run: ssh vm "sudo systemctl stop hercules-ci-agent.service"
 
       - name: Create the agent secrets directory
-        if: ${{ steps.hercules-ci-agent-active.outputs.active != 'true' }}
+        env:
+          ACTIVE: ${{ steps.hercules-ci-agent-active.outputs.active }}
+        if: ${{ env.ACTIVE != 'true' }}
         run: ssh vm "sudo mkdir -p /var/lib/hercules-ci-agent/secrets"
 
       - name: Create the agent binary-caches secret
-        if: ${{ steps.hercules-ci-agent-active.outputs.active != 'true' }}
+        env:
+          ACTIVE: ${{ steps.hercules-ci-agent-active.outputs.active }}
+        if: ${{ env.ACTIVE != 'true' }}
         run: |
           echo '{
             "cantcache.me": {
@@ -331,13 +347,17 @@ jobs:
             | ssh vm "sudo tee /var/lib/hercules-ci-agent/secrets/binary-caches.json"
 
       - name: Create the agent cluster join token secret
-        if: ${{ steps.hercules-ci-agent-active.outputs.active != 'true' }}
+        env:
+          ACTIVE: ${{ steps.hercules-ci-agent-active.outputs.active }}
+        if: ${{ env.ACTIVE != 'true' }}
         run: |
           echo "${{ secrets.HERCULES_CI_CLUSTER_JOIN_TOKEN }}" \
             | ssh vm "sudo tee /var/lib/hercules-ci-agent/secrets/cluster-join-token.key"
 
       - name: Fix permissions on the agent secrets directory
-        if: ${{ steps.hercules-ci-agent-active.outputs.active != 'true' }}
+        env:
+          ACTIVE: ${{ steps.hercules-ci-agent-active.outputs.active }}
+        if: ${{ env.ACTIVE != 'true' }}
         run: |
           ssh vm <<EOF
           sudo chown -R hercules-ci-agent /var/lib/hercules-ci-agent
@@ -345,5 +365,54 @@ jobs:
           EOF
 
       - name: Start the agent
-        if: ${{ steps.hercules-ci-agent-active.outputs.active != 'true' }}
+        env:
+          ACTIVE: ${{ steps.hercules-ci-agent-active.outputs.active }}
+        if: ${{ env.ACTIVE != 'true' }}
         run: ssh vm "sudo systemctl start hercules-ci-agent.service"
+
+  terminate-nixos-azure-vm:
+    name: Terminate NixOS Azure VM
+    runs-on: ubuntu-latest
+    if: ${{ inputs.action == 'terminate' }}
+    needs: get-vhd-name
+    outputs:
+      vhd-name: ${{ needs.get-vhd-name.outputs.vhd-name }}
+    env:
+      AZURE_STORAGE_ACCOUNT: ${{ secrets.AZURE_STORAGE_ACCOUNT }}
+      AZURE_STORAGE_AUTH_MODE: login
+      VHD_NAME: ${{ needs.get-vhd-name.outputs.vhd-name }}
+    steps:
+      - name: Log in to Azure
+        uses: Azure/login@v1
+        with:
+          creds: |
+            {
+              "clientId": "${{ secrets.AZURE_CLIENT_ID }}",
+              "clientSecret": "${{ secrets.AZURE_CLIENT_SECRET }}",
+              "subscriptionId": "${{ secrets.AZURE_SUBSCRIPTION_ID }}",
+              "tenantId": "${{ secrets.AZURE_TENANT_ID }}"
+            }
+
+      # TODO(@connorbaker): Allow multiple VMs to be created.
+      - name: Delete matching VMs
+        id: check-vm-running
+        run: |
+          VMS=$(az vm list --resource-group "${{ secrets.AZURE_RESOURCE_GROUP }}")
+          echo "$VMS" | jq
+
+          MATCHING_VMS=$(echo "$VMS" | jq -cr --arg name "${{ env.VHD_NAME }}" 'map(select(.name == $name))')
+          echo "$MATCHING_VMS" | jq
+
+          az vm delete \
+              --ids $(echo "$MATCHING_VMS" | jq -cr '.[].id') \
+              --yes \
+            | jq -cr
+
+      - name: Check if VHD exists in blob storage
+        id: check-vhd-blob-exists
+        run: |
+          az storage blob exists \
+              --container-name "${{ secrets.AZURE_STORAGE_CONTAINER }}" \
+              --name "${{ env.VHD_NAME }}.vhd" \
+            | jq -cr '"vhd-blob-exists=\(.exists)"' \
+            | tee -a "$GITHUB_OUTPUT"
