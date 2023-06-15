@@ -18,35 +18,6 @@
 
   environment.memoryAllocator.provider = "mimalloc";
 
-  fileSystems = let
-    defaults = {
-      autoFormat = true;
-      fsType = "overlay-ext4";
-      options = [
-        "defaults"
-        "nofail"
-        "X-mount.mkdir"
-        "x-systemd.device-timeout=2min"
-        "x-systemd.mount-timeout=2min"
-        "lowerdir=/nix/store"
-        "upperdir=/nix/store-host/upper"
-        "workdir=/nix/store-host/workdir/nix/store"
-      ];
-    };
-  in {
-    "/nix/store-host" =
-      {
-        device = "/dev/nvme0n1";
-      }
-      // defaults;
-
-    # "/nix/store-host/workdir" =
-    #   {
-    #     device = "/dev/nvme1n1";
-    #   }
-    #   // defaults;
-  };
-
   networking = {
     hostName = "nixos-builder";
     nameservers = [
@@ -124,6 +95,61 @@
       allowSFTP = false;
       enable = true;
       settings.PasswordAuthentication = false;
+    };
+  };
+
+  systemd.services = {
+    mount-nvmes = {
+      description = "Mount the NVMe drives";
+      path = with pkgs; [e2fsprogs lvm2 util-linux];
+      script =
+      # Set up the service
+      ''
+        #!/usr/bin/env bash
+        set -euo pipefail
+      ''
+      # Wait for the devices to be available
+      + ''
+        while [[ ! -e /dev/nvme0n1 || ! -e /dev/nvme1n1 ]]; do
+            sleep 1
+        done
+      ''
+      # Create the physical volumes
+      + ''
+        pvcreate /dev/nvme0n1
+        pvcreate /dev/nvme1n1
+      ''
+      # Create the volume group
+      + ''
+        vgcreate ext_vg /dev/nvme0n1 /dev/nvme1n1
+      ''
+      # Create the logical volume
+      + ''
+        lvcreate -l "100%FREE" -n ext_lv ext_vg
+      ''
+      # Format the logical volume
+      + ''
+        mkfs.ext4 -L nixos-store /dev/ext_vg/ext_lv
+      ''
+      # Create and mount the mount point
+      + ''
+        mkdir -p /ext
+        mount /dev/ext_vg/ext_lv /ext
+        mkdir -p /ext/{upper,work}dir
+      ''
+      # Mount the overlayfs
+      + ''
+        mount \
+          -t overlay \
+          -o lowerdir=/nix/store,upperdir=/ext/upperdir,workdir=/ext/workdir \
+          none \
+          /nix/store
+      '';
+      serviceConfig = {
+        RemainAfterExit = "yes";
+        Type = "oneshot";
+      };
+      wantedBy = ["multi-user.target"];
     };
   };
 

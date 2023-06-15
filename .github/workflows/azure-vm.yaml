@@ -103,7 +103,9 @@ jobs:
             | tee -a "$GITHUB_OUTPUT"
 
       - name: Restore the VHD from GitHub Actions' cache
-        if: ${{ steps.check-vhd-blob-exists.outputs.vhd-blob-exists != 'true' }}
+        env:
+          VHD_BLOB_EXISTS: ${{ steps.check-vhd-blob-exists.outputs.vhd-blob-exists }}
+        if: ${{ env.VHD_BLOB_EXISTS != 'true' }}
         id: restore-vhd
         uses: actions/cache/restore@v3
         with:
@@ -111,11 +113,17 @@ jobs:
           path: ./result/disk.vhd
 
       - name: Checkout
-        if: ${{ steps.restore-vhd.outputs.cache-hit != 'true' }}
+        env:
+          CACHE_HIT: ${{ steps.restore-vhd.outputs.cache-hit }}
+          VHD_BLOB_EXISTS: ${{ steps.check-vhd-blob-exists.outputs.vhd-blob-exists }}
+        if: ${{ env.CACHE_HIT != 'true' && env.VHD_BLOB_EXISTS != 'true' }}
         uses: actions/checkout@v3
 
       - name: Set up Nix
-        if: ${{ steps.restore-vhd.outputs.cache-hit != 'true' }}
+        env:
+          CACHE_HIT: ${{ steps.restore-vhd.outputs.cache-hit }}
+          VHD_BLOB_EXISTS: ${{ steps.check-vhd-blob-exists.outputs.vhd-blob-exists }}
+        if: ${{ env.CACHE_HIT != 'true' && env.VHD_BLOB_EXISTS != 'true' }}
         uses: ./.github/actions/nix-setup
         with:
           cant-cache-me-nix-secret-signing-key: ${{ secrets.CANT_CACHE_ME_NIX_SECRET_SIGNING_KEY }}
@@ -123,7 +131,10 @@ jobs:
           cloudflare-r2-secret-access-key: ${{ secrets.CLOUDFLARE_R2_SECRET_ACCESS_KEY }}
 
       - name: Download the NAR for the VHD
-        if: ${{ steps.restore-vhd.outputs.cache-hit != 'true' }}
+        env:
+          CACHE_HIT: ${{ steps.restore-vhd.outputs.cache-hit }}
+          VHD_BLOB_EXISTS: ${{ steps.check-vhd-blob-exists.outputs.vhd-blob-exists }}
+        if: ${{ env.CACHE_HIT != 'true' && env.VHD_BLOB_EXISTS != 'true' }}
         run: |
           nix store dump-path -v \
               --store https://cantcache.me \
@@ -131,21 +142,30 @@ jobs:
             > "./${{ env.VHD_NAME }}.nar"
 
       - name: Extract the VHD from the NAR
-        if: ${{ steps.restore-vhd.outputs.cache-hit != 'true' }}
+        env:
+          CACHE_HIT: ${{ steps.restore-vhd.outputs.cache-hit }}
+          VHD_BLOB_EXISTS: ${{ steps.check-vhd-blob-exists.outputs.vhd-blob-exists }}
+        if: ${{ env.CACHE_HIT != 'true' && env.VHD_BLOB_EXISTS != 'true' }}
         run: |
           mkdir "./result"
           nix nar cat -v "./${{ env.VHD_NAME }}.nar" /disk.vhd \
             > "./result/disk.vhd"
 
       - name: Copy the VHD to GitHub Actions' cache
-        if: ${{ steps.restore-vhd.outputs.cache-hit != 'true' }}
+        env:
+          CACHE_HIT: ${{ steps.restore-vhd.outputs.cache-hit }}
+          VHD_BLOB_EXISTS: ${{ steps.check-vhd-blob-exists.outputs.vhd-blob-exists }}
+        if: ${{ env.CACHE_HIT != 'true' && env.VHD_BLOB_EXISTS != 'true' }}
         uses: actions/cache/save@v3
         with:
           key: ${{ env.VHD_NAME }}
           path: ./result/disk.vhd
 
       - name: Upload the VHD to an Azure blob
-        if: ${{ steps.check-vhd-blob-exists.outputs.vhd-blob-exists != 'true' }}
+        env:
+          CACHE_HIT: ${{ steps.restore-vhd.outputs.cache-hit }}
+          VHD_BLOB_EXISTS: ${{ steps.check-vhd-blob-exists.outputs.vhd-blob-exists }}
+        if: ${{ env.CACHE_HIT != 'true' && env.VHD_BLOB_EXISTS != 'true' }}
         run: |
           az storage blob upload \
             --container-name "${{ secrets.AZURE_STORAGE_CONTAINER }}" \
@@ -276,10 +296,11 @@ jobs:
           EOF
           chmod 600 "$HOME/.ssh/config"
 
-      - name: Check if the agent is active (and so configured)
+      - name: Check if the agent is active (and so configured) with a timeout of 10 minutes
         id: hercules-ci-agent-active
         run: |
-          ssh vm "sudo systemctl is-active --quiet hercules-ci-agent.service" \
+          ssh vm -o ConnectTimeout=600 \
+              "sudo systemctl is-active --quiet hercules-ci-agent.service" \
             && echo "active=true" \
             || echo "active=false" \
             | tee -a "$GITHUB_OUTPUT"
