@@ -19,6 +19,7 @@ class Launch(BaseModel):
         file_system_names: Names of the file systems to attach to the instance
         quantity: Number of instances to launch
     """
+
     region_name: schemas.RegionName
     instance_type_name: schemas.InstanceTypeName
     ssh_key_names: list[schemas.SshKeyName]
@@ -34,6 +35,7 @@ class Terminate(BaseModel):
     Attributes:
         instance_ids: The unique identifiers (IDs) of the instances to terminate
     """
+
     instance_ids: list[schemas.InstanceId]
 
 
@@ -44,6 +46,7 @@ class Restart(BaseModel):
     Attributes:
         instance_ids: The unique identifiers (IDs) of the instances to restart
     """
+
     instance_ids: list[schemas.InstanceId]
 
 
@@ -54,7 +57,8 @@ class AddSSHKey(BaseModel):
     generated. The private key is returned in the response.
 
     Attributes:
-        
+
     """
+
     name: schemas.SshKeyName
     public_key: None | schemas.SshPublicKey = None

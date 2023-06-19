@@ -80,9 +80,7 @@ def launch_instance(api_key: str, launch: request_bodies.Launch) -> responses.La
     return responses.Launch(**response.json())
 
 
-def terminate_instance(
-    api_key: str, terminate: request_bodies.Terminate
-) -> responses.Terminate:
+def terminate_instance(api_key: str, terminate: request_bodies.Terminate) -> responses.Terminate:
     """
     Terminates a given instance.
     """
@@ -99,9 +97,7 @@ def terminate_instance(
     return responses.Terminate(**response.json())
 
 
-def restart_instance(
-    api_key: str, restart: request_bodies.Restart
-) -> responses.Restart:
+def restart_instance(api_key: str, restart: request_bodies.Restart) -> responses.Restart:
     """
     Restarts the given instances.
     """
@@ -126,16 +122,12 @@ def list_ssh_keys(api_key: str) -> responses.SshKeys:
         api_key: Your API key.
     """
     logging.info("Getting SSH keys")
-    response = requests.get(
-        f"{URL}/ssh-keys", headers={"Authorization": f"Bearer {api_key}"}
-    )
+    response = requests.get(f"{URL}/ssh-keys", headers={"Authorization": f"Bearer {api_key}"})
     response.raise_for_status()
     return responses.SshKeys(**response.json())
 
 
-def add_ssh_key(
-    api_key: str, add_ssh_key: request_bodies.AddSSHKey
-) -> responses.AddSSHKey:
+def add_ssh_key(api_key: str, add_ssh_key: request_bodies.AddSSHKey) -> responses.AddSSHKey:
     """
     Add an SSH key
 
@@ -202,8 +194,6 @@ def list_file_systems(api_key: str) -> responses.FileSystems:
         api_key: Your API key.
     """
     logging.info("Getting file systems")
-    response = requests.get(
-        f"{URL}/file-systems", headers={"Authorization": f"Bearer {api_key}"}
-    )
+    response = requests.get(f"{URL}/file-systems", headers={"Authorization": f"Bearer {api_key}"})
     response.raise_for_status()
     return responses.FileSystems(**response.json())

@@ -1,16 +1,6 @@
 {
   inputs = {
     flake-parts = {
-      # TODO(@connorbaker): Using nixpkgs-lib fails with the following:
-      #   … while evaluating the attribute 'flake-parts.lib.mkFlake'
-      #     at /nix/store/jiyanhix45y0a7m9nsrng44yjzrp79m9-source/flake.nix:9:5:
-      #       8|   outputs = { nixpkgs-lib, ... }: {
-      #       9|     lib = import ./lib.nix {
-      #        |     ^
-      #      10|       inherit (nixpkgs-lib) lib;
-      #   (stack trace truncated; use '--show-trace' to show the full trace)
-      #   error: getting status of '/nix/store/dpj48n6j242fh3vq27fgwdcybaa7lydb-source/.version':
-      #   No such file or directory
       inputs.nixpkgs-lib.follows = "nixpkgs";
       url = "github:hercules-ci/flake-parts";
     };
@@ -34,6 +24,10 @@
       "https://cantcache.me"
       "https://cuda-maintainers.cachix.org"
     ];
+    extra-trusted-substituters = [
+      "https://cantcache.me"
+      "https://cuda-maintainers.cachix.org"
+    ];
     extra-trusted-public-keys = [
       "cantcache.me:Y+FHAKfx7S0pBkBMKpNMQtGKpILAfhmqUSnr5oNwNMs="
       "cuda-maintainers.cachix.org-1:0dq3bujKpuEPMCX6U4WylrUDZ9JyUG0VpVZa7CNfq5E="
@@ -46,9 +40,9 @@
       imports = [./nix];
       perSystem = {pkgs, ...}: {
         config = {
-          cudaCapabilities = ["8.9"];
+          cudaCapabilities = ["8.0" "8.6" "8.9"];
           cudaPackages = "cudaPackages_11_8";
-          cudaForwardCompat = false;
+          cudaForwardCompat = true;
           formatter = pkgs.alejandra;
         };
       };

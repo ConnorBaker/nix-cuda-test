@@ -54,6 +54,7 @@ DateTime = NewType("DateTime", str)
 
 UserStatus = Literal["active", "deactivated"]
 
+
 class User(BaseModel):
     """
     Information about a user in your team
@@ -224,7 +225,9 @@ class InstanceType(BaseModel):
     price_cents_per_hour: int
     specs: Specs
 
+
 InstanceStatus = Literal["active", "booting", "unhealthy", "terminated"]
+
 
 class Instance(BaseModel):
     """

@@ -1,4 +1,5 @@
 from dataclasses import dataclass, field
+from typing import Any
 
 import pytorch_lightning as pl
 from torch.utils.data import DataLoader
@@ -42,8 +43,9 @@ class CIFARDataModule(pl.LightningDataModule):
             download=True,
         )
 
-    def train_dataloader(self) -> DataLoader:
-        train_loader: DataLoader = DataLoader(
+    # Depends on the type of train_transforms
+    def train_dataloader(self) -> DataLoader[Any]:
+        train_loader: DataLoader[Any] = DataLoader(
             dataset=self.train_dataset,
             batch_size=self.batch_size,
             num_workers=self.num_workers,
@@ -53,8 +55,9 @@ class CIFARDataModule(pl.LightningDataModule):
         )
         return train_loader
 
-    def val_dataloader(self) -> DataLoader:
-        val_loader: DataLoader = DataLoader(
+    # Depends on the type of val_transforms
+    def val_dataloader(self) -> DataLoader[Any]:
+        val_loader: DataLoader[Any] = DataLoader(
             dataset=self.val_dataset,
             batch_size=self.batch_size,
             num_workers=self.num_workers,

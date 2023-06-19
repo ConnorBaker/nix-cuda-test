@@ -13,12 +13,6 @@
               torchvision
             ]))
         ];
-
-        # Make an alias for python so it's wrapped with nixGLNvidia.
-        shellHook = ''
-          alias python3="${nixGL.nixGLNvidia.name} python3"
-          alias python="${nixGL.nixGLNvidia.name} python3"
-        '';
       };
   };
 }

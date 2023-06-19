@@ -47,7 +47,7 @@ class ViT(pl.LightningModule):
             nn.Linear(in_features=self.latent_size, out_features=self.num_classes),
         )
 
-    def forward(self, test_input: Tensor) -> Tensor:
+    def forward(self, test_input: Tensor) -> Tensor:  # type: ignore[override]
         embedded: Tensor = self.embedding(test_input)
         enc_output: Tensor = self.encoders(embedded)
         class_token_embed: Tensor = enc_output[:, 0]

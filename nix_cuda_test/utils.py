@@ -14,11 +14,10 @@ class PatchExtractor(pl.LightningModule):
     def __post_init__(self) -> None:
         super().__init__()
 
-    def forward(self, input_data: Tensor) -> Tensor:
+    def forward(self, input_data: Tensor) -> Tensor:  # type: ignore[override]
         batch_size, _channels, height, width = input_data.size()
         assert height % self.patch_size == 0 and width % self.patch_size == 0, (
-            f"Input height ({height}) and width ({width}) must be divisible "
-            f"by the patch size ({self.patch_size})"
+            f"Input height ({height}) and width ({width}) must be divisible " f"by the patch size ({self.patch_size})"
         )
 
         num_patches_h: int = height // self.patch_size
@@ -59,17 +58,13 @@ class InputEmbedding(pl.LightningModule):
             out_features=self.latent_size,
         )
         # Class token
-        self.class_token = nn.Parameter(
-            torch.randn(size=(self.batch_size, 1, self.latent_size))
-        )
+        self.class_token = nn.Parameter(torch.randn(size=(self.batch_size, 1, self.latent_size)))
         # Positional embedding
-        self.pos_embedding = nn.Parameter(
-            torch.randn(size=(self.batch_size, 1, self.latent_size))
-        )
+        self.pos_embedding = nn.Parameter(torch.randn(size=(self.batch_size, 1, self.latent_size)))
         # Patchify
         self.patchify = PatchExtractor(patch_size=self.patch_size)
 
-    def forward(self, input_data: Tensor) -> Tensor:
+    def forward(self, input_data: Tensor) -> Tensor:  # type: ignore[override]
         # Patchifying the Image
         patches: Tensor = self.patchify(input_data)
 
@@ -110,7 +105,7 @@ class EncoderBlock(pl.LightningModule):
             nn.Dropout(p=self.dropout),
         )
 
-    def forward(self, emb_patches: Tensor) -> Tensor:
+    def forward(self, emb_patches: Tensor) -> Tensor:  # type: ignore[override]
         first_norm: Tensor = self.norm(emb_patches)
         attention_out: Tensor = self.attention(first_norm, first_norm, first_norm)[0]
         first_added: Tensor = attention_out + emb_patches

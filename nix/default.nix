@@ -22,8 +22,8 @@
             pkgs = prev;
             enableIntelX86Extensions = true;
             enable32bits = false;
-            nvidiaVersion = "530.41.03";
-            nvidiaHash = "sha256-riehapaMhVA/XRYd2jQ8FgJhKwJfSu4V+S4uoKy3hLE=";
+            nvidiaVersion = "535.54.03";
+            nvidiaHash = "sha256-RUdk9X6hueGRZqNw94vhDnHwYmQ4+xl/cm3DyvBbQII=";
           };
         })
         # Change the default version of CUDA used

@@ -1,6 +1,7 @@
 import argparse
 
 import pytorch_lightning as pl
+import torch
 from torchvision.transforms import Compose, Resize, ToTensor
 
 from nix_cuda_test.cifar_data_module import CIFARDataModule
@@ -15,9 +16,7 @@ def main():
         default=16,
         help="patch size for images (default : 16)",
     )
-    parser.add_argument(
-        "--latent-size", type=int, default=768, help="latent size (default : 768)"
-    )
+    parser.add_argument("--latent-size", type=int, default=768, help="latent size (default : 768)")
     parser.add_argument(
         "--n-channels",
         type=int,
@@ -25,12 +24,8 @@ def main():
         help="number of channels in images (default : 3)",
     )
     parser.add_argument("--num-heads", type=int, default=12, help="(default : 12)")
-    parser.add_argument(
-        "--num-encoders", type=int, default=12, help="number of encoders (default : 12)"
-    )
-    parser.add_argument(
-        "--dropout", type=int, default=0.1, help="dropout value (default : 0.1)"
-    )
+    parser.add_argument("--num-encoders", type=int, default=12, help="number of encoders (default : 12)")
+    parser.add_argument("--dropout", type=int, default=0.1, help="dropout value (default : 0.1)")
     parser.add_argument(
         "--img-size",
         type=int,
@@ -43,26 +38,18 @@ def main():
         default=16,
         help="number of classes in dataset (default : 16)",
     )
-    parser.add_argument(
-        "--epochs", type=int, default=10, help="number of epochs (default : 10)"
-    )
-    parser.add_argument(
-        "--lr", type=int, default=1e-2, help="base learning rate (default : 0.01)"
-    )
+    parser.add_argument("--epochs", type=int, default=10, help="number of epochs (default : 10)")
+    parser.add_argument("--lr", type=int, default=1e-2, help="base learning rate (default : 0.01)")
     parser.add_argument(
         "--weight-decay",
         type=int,
         default=3e-2,
         help="weight decay value (default : 0.03)",
     )
-    parser.add_argument(
-        "--batch-size", type=int, default=64, help="batch size (default : 64)"
-    )
+    parser.add_argument("--batch-size", type=int, default=64, help="batch size (default : 64)")
     args = parser.parse_args()
 
-    transforms = Compose(
-        [Resize(size=(args.img_size, args.img_size), antialias=True), ToTensor()]
-    )
+    transforms = Compose([Resize(size=(args.img_size, args.img_size), antialias=True), ToTensor()])
     data_module = CIFARDataModule(
         batch_size=args.batch_size,
         data_dir="data",
@@ -98,7 +85,7 @@ def main():
 
     trainer.fit(
         datamodule=data_module,
-        model=model,
+        model=torch.compile(model),
     )
 
 
@@ -130,8 +117,8 @@ if __name__ == "__main__":
 
     import torch._dynamo.config
 
-    torch._dynamo.config.log_level = logging.DEBUG
-    torch._dynamo.config.verbose = True
+    # torch._dynamo.config.log_level = logging.DEBUG
+    # torch._dynamo.config.verbose = True
 
     import torch._inductor.config
 
@@ -140,10 +127,10 @@ if __name__ == "__main__":
     torch._inductor.config.epilogue_fusion = True
     torch._inductor.config.permute_fusion = True
     torch._inductor.config.reordering = True
-    torch._inductor.config.shape_padding = True
+    # torch._inductor.config.shape_padding = True
     torch._inductor.config.size_asserts = False
-    torch._inductor.config.triton.cudagraphs = True
-    torch._inductor.config.tune_layout = True
+    # torch._inductor.config.triton.cudagraphs = True
+    # torch._inductor.config.tune_layout = True
     torch._dynamo.reset()
 
     main()

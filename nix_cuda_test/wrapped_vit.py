@@ -2,7 +2,6 @@ from dataclasses import dataclass, field
 
 import pytorch_lightning as pl
 import torch.nn as nn
-import torch
 from torch import Tensor
 from torch.optim import Optimizer
 from torch.optim.adam import Adam
@@ -59,18 +58,18 @@ class WrappedViT(pl.LightningModule):
             patch_size=self.patch_size,
         )
 
-    def forward(self, test_input: Tensor) -> Tensor:
+    def forward(self, test_input: Tensor) -> Tensor:  # type: ignore[override]
         ret: Tensor = self.model(test_input)
         return ret
 
-    def training_step(self, batch: Tensor, batch_idx: int) -> Tensor:
+    def training_step(self, batch: Tensor, batch_idx: int) -> Tensor:  # type: ignore[override]
         images, labels = batch
         logits: Tensor = self(images)
         loss: Tensor = self.criterion(logits, labels)
         self.log("train_loss", loss, prog_bar=True)
         return loss
 
-    def validation_step(self, batch: Tensor, batch_idx: int) -> Tensor:
+    def validation_step(self, batch: Tensor, batch_idx: int) -> Tensor:  # type: ignore[override]
         images, labels = batch
         logits: Tensor = self(images)
         loss: Tensor = self.criterion(logits, labels)
@@ -78,7 +77,5 @@ class WrappedViT(pl.LightningModule):
         return loss
 
     def configure_optimizers(self) -> Optimizer:
-        optimizer: Optimizer = Adam(
-            self.model.parameters(), lr=self.lr, weight_decay=self.weight_decay
-        )
+        optimizer: Optimizer = Adam(self.model.parameters(), lr=self.lr, weight_decay=self.weight_decay)
         return optimizer

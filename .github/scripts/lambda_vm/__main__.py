@@ -57,16 +57,13 @@ def check_if_available(cli_args: CliArgs) -> responses.InstanceTypes.DataInstanc
                 matching.append(data_instance_type)
 
     if len(matching) == 0:
-        logging.error(
-            f"No available instances found for {cli_args.instance_type_name}."
-        )
+        logging.error(f"No available instances found for {cli_args.instance_type_name}.")
         logging.error(
             "Consider using one of the available instances: "
             + json.dumps(
                 {
                     instance.instance_type.name: ", ".join(
-                        region.name
-                        for region in instance.regions_with_capacity_available
+                        region.name for region in instance.regions_with_capacity_available
                     )
                     for instance in available
                 },
@@ -77,23 +74,16 @@ def check_if_available(cli_args: CliArgs) -> responses.InstanceTypes.DataInstanc
         logging.error("Exiting with error...")
         exit(1)
     elif len(matching) > 1:
-        logging.error(
-            "Found multiple entries for the same instance type, which should not"
-            " happen."
-        )
+        logging.error("Found multiple entries for the same instance type, which should not" " happen.")
         logging.error("Exiting with error...")
         exit(1)
 
     return matching[0]
 
 
-def wait_for_status(
-    api_key: str, status: schemas.InstanceStatus, id: schemas.InstanceId
-) -> responses.Instance:
+def wait_for_status(api_key: str, status: schemas.InstanceStatus, id: schemas.InstanceId) -> responses.Instance:
     # Wait for instance to be active
-    logging.info(
-        f"Waiting for instance {id} to be active, will query status every 30s."
-    )
+    logging.info(f"Waiting for instance {id} to be active, will query status every 30s.")
     details = paths.get_instance(api_key, id)
     actual_status: schemas.InstanceStatus = details.data.status
     while actual_status != status:
@@ -102,9 +92,7 @@ def wait_for_status(
             logging.error("Instance is unhealthy, exiting with error...")
             exit(1)
 
-        logging.info(
-            f"Instance {id} is {actual_status}, waiting for transition to {status}..."
-        )
+        logging.info(f"Instance {id} is {actual_status}, waiting for transition to {status}...")
         sleep(30)
         return wait_for_status(api_key, status, id)
 
@@ -114,9 +102,7 @@ def wait_for_status(
 
 def start_instance(cli_args: CliArgs) -> str:
     # Check if available
-    data_instance_type: responses.InstanceTypes.DataInstanceType = check_if_available(
-        cli_args
-    )
+    data_instance_type: responses.InstanceTypes.DataInstanceType = check_if_available(cli_args)
     logging.info("Found availability for requested instance type")
 
     launch_request_body: request_bodies.Launch = request_bodies.Launch(
@@ -139,9 +125,7 @@ def start_instance(cli_args: CliArgs) -> str:
 
     ip: None | str = details.data.ip
     if ip is None:
-        logging.error(
-            "Instance is active, but has no IP address, exiting with error..."
-        )
+        logging.error("Instance is active, but has no IP address, exiting with error...")
         exit(1)
     else:
         logging.info(f"Instance {id} is active at IP address {ip}.")
@@ -154,9 +138,7 @@ def terminate_instance(cli_args: CliArgs, instance: schemas.Instance) -> str:
         cli_args.api_key,
         request_bodies.Terminate(instance_ids=[instance.id]),
     )
-    logging.info(
-        f"Sent request to terminate instance(s) {terminated.data.model_dump_json()}."
-    )
+    logging.info(f"Sent request to terminate instance(s) {terminated.data.model_dump_json()}.")
     terminated_instances: list[schemas.Instance] = terminated.data.terminated_instances
     assert len(terminated_instances) == 1
     terminated_instance = terminated_instances[0]
@@ -165,9 +147,7 @@ def terminate_instance(cli_args: CliArgs, instance: schemas.Instance) -> str:
     logging.info(f"Instance {id} is terminated.")
     ip: None | str = terminated_instance.ip
     if ip is None:
-        logging.error(
-            "Instance is terminated, but had no IP address, exiting with error..."
-        )
+        logging.error("Instance is terminated, but had no IP address, exiting with error...")
         exit(1)
     else:
         logging.info(f"Instance {id} is terminated at IP address {ip}.")
