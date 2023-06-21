@@ -1,4 +1,4 @@
-name: Run Tests on Lambda VM
+name: Lambda Tests
 
 defaults:
   run:
@@ -48,5 +48,5 @@ jobs:
           cloudflare-r2-access-key-id: ${{ secrets.CLOUDFLARE_R2_ACCESS_KEY_ID }}
           cloudflare-r2-secret-access-key: ${{ secrets.CLOUDFLARE_R2_SECRET_ACCESS_KEY }}
       
-      - name: Run ${{ matrix.attribute }}}
+      - name: Run ${{ matrix.attribute }}
         run: nix run --print-build-logs .#${{ matrix.attribute }}
