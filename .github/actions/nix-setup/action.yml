@@ -88,8 +88,8 @@ runs:
           cores = 0
           experimental-features = flakes nix-command no-url-literals
           extra-substituters = https://cantcache.me https://cuda-maintainers.cachix.org
-          extra-trusted-substituters = https://cantcache.me https://cuda-maintainers.cachix.org
           extra-trusted-public-keys = cantcache.me:Y+FHAKfx7S0pBkBMKpNMQtGKpILAfhmqUSnr5oNwNMs= cuda-maintainers.cachix.org-1:0dq3bujKpuEPMCX6U4WylrUDZ9JyUG0VpVZa7CNfq5E=
+          extra-trusted-substituters = https://cantcache.me https://cuda-maintainers.cachix.org
           fsync-metadata = false # for performance
           http-connections = 0
           keep-derivations = true
@@ -97,6 +97,8 @@ runs:
           max-jobs = auto
           max-substitution-jobs = 1024
           narinfo-cache-negative-ttl = 0
+          narinfo-cache-positive-ttl = 0
           secret-key-files = ${{ steps.get-home.outputs.home }}/.config/nix/secret-signing-key.key
           system-features = nixos-test benchmark big-parallel kvm
+          tarball-ttl = 0
           trusted-users = ["root" "@nixbld" "@wheel" "connorbaker" "runner"];
