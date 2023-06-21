@@ -134,7 +134,7 @@ jobs:
       - name: Terminate matching instances
         id: instance-id
         env:
-          IDS: ${{ fromJSON(steps.running-instances.outputs.json) }}
+          IDS: ${{ steps.running-instances.outputs.json }}
         run: |
           if [[ '${{ env.IDS }}' == '[]'' ]]; then
             echo "No instances found with the name 'github-runner-${{ inputs.instance-type-name }}'"
