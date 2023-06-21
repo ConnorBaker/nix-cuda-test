@@ -81,13 +81,14 @@ runs:
       if: ${{ steps.check-secret-signing-key-file.outputs.exists != 'true' }}
       uses: cachix/install-nix-action@v21
       with:
-        install_url: https://releases.nixos.org/nix/nix-2.16.0/install
+        install_url: https://releases.nixos.org/nix/nix-2.16.1/install
         extra_nix_config: |
           accept-flake-config = true
-          allow-import-from-derivation = false
+          allow-import-from-derivation = true
           cores = 0
           experimental-features = flakes nix-command no-url-literals
           extra-substituters = https://cantcache.me https://cuda-maintainers.cachix.org
+          extra-trusted-substituters = https://cantcache.me https://cuda-maintainers.cachix.org
           extra-trusted-public-keys = cantcache.me:Y+FHAKfx7S0pBkBMKpNMQtGKpILAfhmqUSnr5oNwNMs= cuda-maintainers.cachix.org-1:0dq3bujKpuEPMCX6U4WylrUDZ9JyUG0VpVZa7CNfq5E=
           fsync-metadata = false # for performance
           http-connections = 0

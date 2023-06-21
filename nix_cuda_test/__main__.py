@@ -113,8 +113,6 @@ if __name__ == "__main__":
     # See: https://pytorch.org/docs/stable/generated/torch.set_float32_matmul_precision.html
     torch.set_float32_matmul_precision("medium")  # type: ignore
 
-    import logging
-
     import torch._dynamo.config
 
     # torch._dynamo.config.log_level = logging.DEBUG

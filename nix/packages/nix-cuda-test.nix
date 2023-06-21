@@ -3,21 +3,33 @@
   config,
   lib,
   # propagatedBuildInputs
-  pip,
+  click,
+  openai-triton,
+  pydantic,
   pytorch-lightning,
   torch,
+  torchvision,
 }: let
   attrs = {
     pname = "nix-cuda-test";
     version = "0.1.0";
     format = "pyproject";
-    src = ../..;
-    # Pip is required for torch.utils.collect_env to work.
-    nativeBuildInputs = [pip];
-    buildInputs = [pip];
-    propagatedBuildInputs = [pip pytorch-lightning torch];
+    src = lib.sources.sourceByRegex ../.. [
+      "nix_cuda_test(:?/.*)?"
+      "pyproject.toml"
+    ];
+    propagatedBuildInputs = [
+      click
+      openai-triton
+      pydantic
+      pytorch-lightning
+      torch
+      torchvision
+    ];
     pythonImportsCheck = [
+      "click"
       "nix_cuda_test"
+      "pydantic"
       "pytorch_lightning"
       "torch"
     ];

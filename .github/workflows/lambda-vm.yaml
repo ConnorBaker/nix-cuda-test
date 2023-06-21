@@ -12,7 +12,7 @@ on:
         required: true
         type: choice
         options:
-          - start
+          - launch
           - terminate
       instance-type-name:
         description: Instance
@@ -34,43 +34,131 @@ on:
           - gpu_8x_v100
 
 jobs:
-  action-lambda-vm:
-    name: Lambda VM
+  launch-lambda-vm:
+    name: Launch Lambda VM
     runs-on: ubuntu-latest
+    if: ${{ inputs.action == 'launch' }}
     concurrency: lambda-vm-${{ inputs.instance-type-name }}
     outputs:
-      ip: ${{ steps.action-lambda-vm.outputs.ip }}
+      json: ${{ steps.wait-for-instance-status.outputs.json }}
+    env:
+      # Allows us to avoid passing --api-key to every invocation of lambda-cloud
+      LAMBDA_CLOUD_API_KEY: ${{ secrets.LAMBDA_CLOUD_RUNNER_API_KEY }}
     steps:
       - name: Checkouts
         uses: actions/checkout@v3
 
-      - name: Set up Python 3.11
-        uses: actions/setup-python@v4
+      - name: Set up Nix
+        uses: ./.github/actions/nix-setup
         with:
-          python-version: "3.11"
-          cache: pip
+          cant-cache-me-nix-secret-signing-key: ${{ secrets.CANT_CACHE_ME_NIX_SECRET_SIGNING_KEY }}
+          cloudflare-r2-access-key-id: ${{ secrets.CLOUDFLARE_R2_ACCESS_KEY_ID }}
+          cloudflare-r2-secret-access-key: ${{ secrets.CLOUDFLARE_R2_SECRET_ACCESS_KEY }}
 
-      - run: python3 -m pip install -U --pre -r requirements.txt
-        working-directory: ./.github/scripts/lambda_vm
-
-      - name: Run python script
-        id: action-lambda-vm
-        working-directory: ./.github/scripts
+      - name: Check if Lambda Cloud has our GitHub Runner SSH keys available
+        id: github-runner-ssh-keys
         run: |
-          python3 -m lambda_vm \
-            --action "${{ inputs.action }}" \
-            --api-key "${{ secrets.LAMBDA_CLOUD_RUNNER_API_KEY }}" \
+          nix run github:ConnorBaker/lambda-cloud#lambda-cloud -- \
+            --info \
+            get-ssh-keys \
+            | tee /dev/stderr \
+            | jq -cr 'any(.[]; .name == "github-runner") | "json=\(.)"' \
+            | tee -a "$GITHUB_OUTPUT"
+
+      - name: Add GitHub Runner SSH key to Lambda Cloud
+        if: ${{ !fromJSON(steps.github-runner-ssh-keys.outputs.json) }}
+        run: |
+          nix run github:ConnorBaker/lambda-cloud#lambda-cloud -- \
+            --info \
+            add-ssh-key \
+            --ssh-key-name github-runner \
+            --ssh-public-key "${{ secrets.RUNNER_SSH_PUBLIC_KEY }}"
+
+      # NOTE: Assumes that we can only ever launch a single instance at a time with lambda-cloud
+      - name: Launch the Lambda Cloud instance
+        id: launch-instance
+        run: |
+          nix run github:ConnorBaker/lambda-cloud#lambda-cloud -- \
+            --info \
+            launch-instance \
             --instance-type-name "${{ inputs.instance-type-name }}" \
-          | sed -e 's/^/ip=/' \
-          | tee -a "$GITHUB_OUTPUT"
+            --instance-name "github-runner-${{ inputs.instance-type-name }}" \
+            --ssh-key-name github-runner \
+            | tee /dev/stderr \
+            | jq -cr '"json=\(.[0])"' \
+            | tee -a "$GITHUB_OUTPUT"
+
+      - name: Wait for the instance to be active
+        id: wait-for-instance-status
+        run: |
+          nix run github:ConnorBaker/lambda-cloud#lambda-cloud -- \
+            --info \
+            wait-for-instance-status \
+            --instance-id "${{ fromJSON(steps.launch-instance.outputs.json) }}" \
+            --instance-status active \
+            | tee /dev/stderr \
+            | jq -cr '"json=\(.)"' \
+            | tee -a "$GITHUB_OUTPUT"
+
+  terminate-lambda-vm:
+    name: Terminate Lambda VM
+    runs-on: ubuntu-latest
+    if: ${{ inputs.action == 'terminate' }}
+    concurrency: lambda-vm-${{ inputs.instance-type-name }}
+    env:
+      # Allows us to avoid passing --api-key to every invocation of lambda-cloud
+      LAMBDA_CLOUD_API_KEY: ${{ secrets.LAMBDA_CLOUD_RUNNER_API_KEY }}
+    steps:
+      - name: Checkouts
+        uses: actions/checkout@v3
+
+      - name: Set up Nix
+        uses: ./.github/actions/nix-setup
+        with:
+          cant-cache-me-nix-secret-signing-key: ${{ secrets.CANT_CACHE_ME_NIX_SECRET_SIGNING_KEY }}
+          cloudflare-r2-access-key-id: ${{ secrets.CLOUDFLARE_R2_ACCESS_KEY_ID }}
+          cloudflare-r2-secret-access-key: ${{ secrets.CLOUDFLARE_R2_SECRET_ACCESS_KEY }}
+
+      - name: Get running instances matching the instance type name
+        id: running-instances
+        run: |
+          nix run github:ConnorBaker/lambda-cloud#lambda-cloud -- \
+            --info \
+            get-instances \
+            | tee /dev/stderr \
+            | jq -cr 'map(select(.status != "terminated"))' \
+            | tee /dev/stderr \
+            | jq -cr 'map(select(.name == "github-runner-${{ inputs.instance-type-name }}"))' \
+            | tee /dev/stderr \
+            | jq -cr 'map(.id)' \
+            | tee /dev/stderr \
+            | jq -cr '"json=\(.)"' \
+            | tee -a "$GITHUB_OUTPUT"
+
+      - name: Terminate matching instances
+        id: instance-id
+        env:
+          IDS: ${{ fromJSON(steps.running-instances.outputs.json) }}
+        run: |
+          if [[ '${{ env.IDS }}' == '[]'' ]]; then
+            echo "No instances found with the name 'github-runner-${{ inputs.instance-type-name }}'"
+            exit 1
+          fi
+
+          for id in $(jq -cr '.[]' <<< '${{ env.IDS }}'); do
+            echo "Terminating instance $id..."
+            nix run github:ConnorBaker/lambda-cloud#lambda-cloud -- \
+              --info \
+              terminate-instance \
+              --instance-id "$id"
+          done
 
   # TODO(@connorbaker): Add checks to make idempotent; although the first script will exit with an
   # error if we attempt to set up a VM that already exists.
   setup-lambda-vm:
     name: Setup Lambda VM
     runs-on: ubuntu-latest
-    needs: action-lambda-vm
-    if: ${{ inputs.action == 'start' }}
+    needs: launch-lambda-vm
     concurrency: lambda-vm-${{ inputs.instance-type-name }}
     steps:
       - name: Set up the GitHub runner SSH keys
@@ -83,7 +171,7 @@ jobs:
           chmod 600 "$HOME/.ssh/ed25519.pub"
           cat >> "$HOME/.ssh/config" <<EOF
           Host vm
-            HostName ${{ needs.action-lambda-vm.outputs.ip }}
+            HostName ${{ fromJSON(needs.launch-lambda-vm.outputs.json).ip }}
             User ubuntu
             IdentityFile $HOME/.ssh/ed25519
             StrictHostKeyChecking no
@@ -119,7 +207,7 @@ jobs:
       - name: Generate an authentication token for the runner
         id: self-hosted-runner-token
         env:
-            GH_TOKEN: ${{ secrets.RUNNER_AUTH_TOKEN }}
+          GH_TOKEN: ${{ secrets.RUNNER_AUTH_TOKEN }}
         run: |
           gh api /repos/ConnorBaker/nix-cuda-test/actions/runners/registration-token \
               --method POST \

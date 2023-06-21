@@ -3,3 +3,5 @@ result
 data
 lightning_logs
 .vscode
+.ruff_cache
+.env

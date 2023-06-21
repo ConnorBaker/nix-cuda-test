@@ -2,7 +2,6 @@
   imports = [
     ./options.nix
     ./apps
-    ./devShells
     ./nixosConfigurations
     ./nixosModules
     ./packages
