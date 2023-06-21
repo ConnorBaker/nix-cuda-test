@@ -85,7 +85,7 @@ jobs:
             --instance-name "github-runner-${{ inputs.instance-type-name }}" \
             --ssh-key-name github-runner \
             | tee /dev/stderr \
-            | jq -cr '"json=\(.[0])"' \
+            | jq -cr '"id=\(.[0])"' \
             | tee -a "$GITHUB_OUTPUT"
 
       - name: Wait for the instance to be active
@@ -94,7 +94,7 @@ jobs:
           nix run github:ConnorBaker/lambda-cloud#lambda-cloud -- \
             --info \
             wait-for-instance-status \
-            --instance-id "${{ fromJSON(steps.launch-instance.outputs.json) }}" \
+            --instance-id "${{ steps.launch-instance.outputs.id }}" \
             --instance-status active \
             | tee /dev/stderr \
             | jq -cr '"json=\(.)"' \
