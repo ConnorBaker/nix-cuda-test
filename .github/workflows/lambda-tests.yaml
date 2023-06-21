@@ -41,12 +41,19 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v3
 
+      - name: Check if Nix exists
+        id: nix-exists
+        run: |
+          nix --version && echo "json=true" || echo "json=false" \
+            | tee -a "$GITHUB_OUTPUT"
+
       - name: Set up Nix
+        if: ${{ !fromJSON(steps.nix-exists.outputs.json) }}
         uses: ./.github/actions/nix-setup
         with:
           cant-cache-me-nix-secret-signing-key: ${{ secrets.CANT_CACHE_ME_NIX_SECRET_SIGNING_KEY }}
           cloudflare-r2-access-key-id: ${{ secrets.CLOUDFLARE_R2_ACCESS_KEY_ID }}
           cloudflare-r2-secret-access-key: ${{ secrets.CLOUDFLARE_R2_SECRET_ACCESS_KEY }}
-      
+
       - name: Run ${{ matrix.attribute }}
         run: nix run --print-build-logs .#${{ matrix.attribute }}
