@@ -136,7 +136,7 @@ jobs:
         env:
           IDS: ${{ steps.running-instances.outputs.json }}
         run: |
-          if [[ '${{ env.IDS }}' == '[]'' ]]; then
+          if [[ '${{ env.IDS }}' == '[]' ]]; then
             echo "No instances found with the name 'github-runner-${{ inputs.instance-type-name }}'"
             exit 1
           fi
