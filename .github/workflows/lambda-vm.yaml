@@ -55,12 +55,13 @@ jobs:
           cloudflare-r2-access-key-id: ${{ secrets.CLOUDFLARE_R2_ACCESS_KEY_ID }}
           cloudflare-r2-secret-access-key: ${{ secrets.CLOUDFLARE_R2_SECRET_ACCESS_KEY }}
 
+      - name: Install lambda-cloud
+        run: nix profile install github:ConnorBaker/lambda-cloud#lambda-cloud --refresh
+
       - name: Check if Lambda Cloud has our GitHub Runner SSH keys available
         id: github-runner-ssh-keys
         run: |
-          nix run github:ConnorBaker/lambda-cloud#lambda-cloud -- \
-            --info \
-            get-ssh-keys \
+          lambda-cloud --info get-ssh-keys \
             | tee /dev/stderr \
             | jq -cr 'any(.[]; .name == "github-runner") | "json=\(.)"' \
             | tee -a "$GITHUB_OUTPUT"
@@ -68,9 +69,7 @@ jobs:
       - name: Add GitHub Runner SSH key to Lambda Cloud
         if: ${{ !fromJSON(steps.github-runner-ssh-keys.outputs.json) }}
         run: |
-          nix run github:ConnorBaker/lambda-cloud#lambda-cloud -- \
-            --info \
-            add-ssh-key \
+          lambda-cloud --info add-ssh-key \
             --ssh-key-name github-runner \
             --ssh-public-key "${{ secrets.RUNNER_SSH_PUBLIC_KEY }}"
 
@@ -78,12 +77,10 @@ jobs:
       - name: Launch the Lambda Cloud instance
         id: launch-instance
         run: |
-          nix run github:ConnorBaker/lambda-cloud#lambda-cloud -- \
-            --info \
-            launch-instance \
-            --instance-type-name "${{ inputs.instance-type-name }}" \
-            --instance-name "github-runner-${{ inputs.instance-type-name }}" \
-            --ssh-key-name github-runner \
+          lambda-cloud --info launch-instance \
+              --instance-type-name "${{ inputs.instance-type-name }}" \
+              --instance-name "github-runner-${{ inputs.instance-type-name }}" \
+              --ssh-key-name github-runner \
             | tee /dev/stderr \
             | jq -cr '"id=\(.[0])"' \
             | tee -a "$GITHUB_OUTPUT"
@@ -91,11 +88,9 @@ jobs:
       - name: Wait for the instance to be active
         id: wait-for-instance-status
         run: |
-          nix run github:ConnorBaker/lambda-cloud#lambda-cloud -- \
-            --info \
-            wait-for-instance-status \
-            --instance-id "${{ steps.launch-instance.outputs.id }}" \
-            --instance-status active \
+          lambda-cloud --info wait-for-instance-status \
+              --instance-id "${{ steps.launch-instance.outputs.id }}" \
+              --instance-status active \
             | tee /dev/stderr \
             | jq -cr '"json=\(.)"' \
             | tee -a "$GITHUB_OUTPUT"
@@ -119,12 +114,13 @@ jobs:
           cloudflare-r2-access-key-id: ${{ secrets.CLOUDFLARE_R2_ACCESS_KEY_ID }}
           cloudflare-r2-secret-access-key: ${{ secrets.CLOUDFLARE_R2_SECRET_ACCESS_KEY }}
 
+      - name: Install lambda-cloud
+        run: nix profile install github:ConnorBaker/lambda-cloud#lambda-cloud --refresh
+
       - name: Get running instances matching the instance type name
         id: running-instances
         run: |
-          nix run github:ConnorBaker/lambda-cloud#lambda-cloud -- \
-            --info \
-            get-instances \
+          lambda-cloud --info get-instances \
             | tee /dev/stderr \
             | jq -cr 'map(select(.status != "terminated"))' \
             | tee /dev/stderr \
@@ -147,10 +143,7 @@ jobs:
 
           for id in $(jq -cr '.[]' <<< '${{ env.IDS }}'); do
             echo "Terminating instance $id..."
-            nix run github:ConnorBaker/lambda-cloud#lambda-cloud -- \
-              --info \
-              terminate-instance \
-              --instance-id "$id"
+            lambda-cloud --info terminate-instance --instance-id "$id"
           done
 
   # TODO(@connorbaker): Add checks to make idempotent; although the first script will exit with an
