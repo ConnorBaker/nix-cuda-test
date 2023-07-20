@@ -23,7 +23,7 @@
   environment = {
     memoryAllocator.provider = "mimalloc";
     # TODO(@connorbaker): Cargo-cult, or necessary for remote builders to work?
-    variables.NIX_REMOTE = "daemon";
+    # variables.NIX_REMOTE = "daemon";
   };
 
   networking = {
@@ -100,7 +100,7 @@
 
   services = {
     hercules-ci-agent = {
-      enable = true;
+      # enable = true;
       # TODO(@connorbaker): Need to evaluate whether we will run out of space using the default
       #   work directory in /var/lib.
       settings.concurrentTasks = 256;
