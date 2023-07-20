@@ -49,6 +49,7 @@ jobs:
   get-vhd-name:
     name: Create a reference to the VHD name for later use
     runs-on: ubuntu-latest
+    if: ${{ inputs.action == 'start' }}
     outputs:
       vhd-name: ${{ steps.get-vhd-name.outputs.vhd-name }}
     steps:
@@ -371,7 +372,7 @@ jobs:
         run: ssh vm "sudo systemctl start hercules-ci-agent.service"
 
   terminate-all-nixos-azure-vms:
-    name: Terminates all NixOS Azure VMs
+    name: Terminates all matching NixOS Azure VMs
     runs-on: ubuntu-latest
     if: ${{ inputs.action == 'terminate all' }}
     env:
@@ -389,13 +390,18 @@ jobs:
               "tenantId": "${{ secrets.AZURE_TENANT_ID }}"
             }
 
-      - name: Delete all VMs ending with "azure-image"
+      - name: Delete all VMs ending with "azure-image" of the specified size
         id: check-vm-running
         run: |
           VMS=$(az vm list --resource-group "${{ secrets.AZURE_RESOURCE_GROUP }}")
           echo "$VMS" | jq
 
-          MATCHING_VMS=$(echo "$VMS" | jq -cr 'map(select(.name | endswith("azure-image")))')
+          MATCHING_VMS=$(echo "$VMS" | jq -cr 'map(
+            select(
+              (.name | endswith("azure-image"))
+              and (.hardwareProfile.vmSize == "${{ inputs.size }}")
+            )
+          )')
           echo "$MATCHING_VMS" | jq
 
           az vm delete \
