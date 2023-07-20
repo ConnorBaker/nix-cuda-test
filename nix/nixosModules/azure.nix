@@ -16,7 +16,10 @@
     tmp.cleanOnBoot = true;
   };
 
-  environment.memoryAllocator.provider = "mimalloc";
+  environment = {
+    memoryAllocator.provider = "mimalloc";
+    variables.NIX_REMOTE = "daemon";
+  };
 
   networking = {
     hostName = "nixos-builder";
@@ -63,7 +66,7 @@
         "kvm"
         "nixos-test"
       ];
-      trusted-users = ["root" "@nixbld" "@wheel" "connorbaker" "runner"];
+      trusted-users = ["root" "@nixbld" "@wheel"];
     };
   };
 
@@ -162,6 +165,7 @@
     mutableUsers = false;
     users = {
       connorbaker = {
+        autoSubUidGidRange = true;
         description = "Connor Baker's user account";
         extraGroups = ["wheel"];
         isNormalUser = true;
