@@ -27,6 +27,8 @@
   };
 
   nix = {
+    daemonCPUSchedPolicy = "batch";
+    daemonIOSchedPriority = 7;
     settings = {
       accept-flake-config = true;
       allow-import-from-derivation = false;
@@ -37,6 +39,10 @@
         "no-url-literals"
       ];
       extra-substituters = [
+        "https://cantcache.me"
+        "https://cuda-maintainers.cachix.org"
+      ];
+      extra-trusted-substituters = [
         "https://cantcache.me"
         "https://cuda-maintainers.cachix.org"
       ];
@@ -161,6 +167,7 @@
         isNormalUser = true;
         openssh.authorizedKeys.keys = [
           "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJXpenPZWADrxK4+6nFmPspmYPPniI3m+3PxAfjbslg+ connorbaker@Connors-MacBook-Pro.local"
+          "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJLd6kNEt/f89JGImBViXake15Y3VQ6AuKR/IBr1etpt connorbaker@nixos-desktop"
         ];
       };
       runner = {
