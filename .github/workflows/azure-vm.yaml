@@ -247,94 +247,94 @@ jobs:
 
   # TODO(@connorbaker): Refactor to allow setting up multiple VMs.
   # TODO(@connorbaker): Is this what requires us to manually restart nix-daemon.service and nix-daemon.socket?
-  ensure-nixos-azure-vm-hercules-ci-configured:
-    name: Ensure NixOS Azure VM has Hercules CI configured
-    runs-on: ubuntu-latest
-    if: ${{ inputs.action == 'start' }}
-    needs: ensure-nixos-azure-vm-is-running
-    env:
-      AZURE_VM_IP: ${{ needs.ensure-nixos-azure-vm-is-running.outputs.public-ip-address }}
-    steps:
-      - name: Set up the GitHub runner SSH keys
-        run: |
-          mkdir -p "$HOME/.ssh"
-          chmod 700 "$HOME/.ssh"
-          echo "${{ secrets.RUNNER_SSH_PRIVATE_KEY }}" > "$HOME/.ssh/ed25519"
-          chmod 600 "$HOME/.ssh/ed25519"
-          echo "${{ secrets.RUNNER_SSH_PUBLIC_KEY }}" > "$HOME/.ssh/ed25519.pub"
-          chmod 600 "$HOME/.ssh/ed25519.pub"
-          cat >> "$HOME/.ssh/config" <<EOF
-          Host vm
-            HostName ${{ env.AZURE_VM_IP }}
-            User runner
-            IdentityFile $HOME/.ssh/ed25519
-            StrictHostKeyChecking no
-          EOF
-          chmod 600 "$HOME/.ssh/config"
+  # ensure-nixos-azure-vm-hercules-ci-configured:
+  #   name: Ensure NixOS Azure VM has Hercules CI configured
+  #   runs-on: ubuntu-latest
+  #   if: ${{ inputs.action == 'start' }}
+  #   needs: ensure-nixos-azure-vm-is-running
+  #   env:
+  #     AZURE_VM_IP: ${{ needs.ensure-nixos-azure-vm-is-running.outputs.public-ip-address }}
+  #   steps:
+  #     - name: Set up the GitHub runner SSH keys
+  #       run: |
+  #         mkdir -p "$HOME/.ssh"
+  #         chmod 700 "$HOME/.ssh"
+  #         echo "${{ secrets.RUNNER_SSH_PRIVATE_KEY }}" > "$HOME/.ssh/ed25519"
+  #         chmod 600 "$HOME/.ssh/ed25519"
+  #         echo "${{ secrets.RUNNER_SSH_PUBLIC_KEY }}" > "$HOME/.ssh/ed25519.pub"
+  #         chmod 600 "$HOME/.ssh/ed25519.pub"
+  #         cat >> "$HOME/.ssh/config" <<EOF
+  #         Host vm
+  #           HostName ${{ env.AZURE_VM_IP }}
+  #           User runner
+  #           IdentityFile $HOME/.ssh/ed25519
+  #           StrictHostKeyChecking no
+  #         EOF
+  #         chmod 600 "$HOME/.ssh/config"
 
-      - name: Check if the agent is active (and so configured) with a timeout of 10 minutes
-        id: hercules-ci-agent-active
-        run: |
-          ssh -o ConnectTimeout=600 vm \
-              "sudo systemctl is-active --quiet hercules-ci-agent.service" \
-            && echo "active=true" \
-            || echo "active=false" \
-            | tee -a "$GITHUB_OUTPUT"
+  #     - name: Check if the agent is active (and so configured) with a timeout of 10 minutes
+  #       id: hercules-ci-agent-active
+  #       run: |
+  #         ssh -o ConnectTimeout=600 vm \
+  #             "sudo systemctl is-active --quiet hercules-ci-agent.service" \
+  #           && echo "active=true" \
+  #           || echo "active=false" \
+  #           | tee -a "$GITHUB_OUTPUT"
 
-      - name: Stop the agent
-        env:
-          ACTIVE: ${{ steps.hercules-ci-agent-active.outputs.active }}
-        if: ${{ env.ACTIVE != 'true' }}
-        run: ssh vm "sudo systemctl stop hercules-ci-agent.service"
+  #     - name: Stop the agent
+  #       env:
+  #         ACTIVE: ${{ steps.hercules-ci-agent-active.outputs.active }}
+  #       if: ${{ env.ACTIVE != 'true' }}
+  #       run: ssh vm "sudo systemctl stop hercules-ci-agent.service"
 
-      - name: Create the agent secrets directory
-        env:
-          ACTIVE: ${{ steps.hercules-ci-agent-active.outputs.active }}
-        if: ${{ env.ACTIVE != 'true' }}
-        run: ssh vm "sudo mkdir -p /var/lib/hercules-ci-agent/secrets"
+  #     - name: Create the agent secrets directory
+  #       env:
+  #         ACTIVE: ${{ steps.hercules-ci-agent-active.outputs.active }}
+  #       if: ${{ env.ACTIVE != 'true' }}
+  #       run: ssh vm "sudo mkdir -p /var/lib/hercules-ci-agent/secrets"
 
-      - name: Create the agent binary-caches secret
-        env:
-          ACTIVE: ${{ steps.hercules-ci-agent-active.outputs.active }}
-        if: ${{ env.ACTIVE != 'true' }}
-        run: |
-          echo '{
-            "cantcache.me": {
-              "kind": "NixCache",
-              "storeURI": "${{ secrets.CANT_CACHE_ME_NIX_S3_URI }}",
-              "publicKeys": [
-                "cantcache.me:Y+FHAKfx7S0pBkBMKpNMQtGKpILAfhmqUSnr5oNwNMs="
-              ],
-              "signingKeys": [
-                "${{ secrets.CANT_CACHE_ME_NIX_SECRET_SIGNING_KEY }}"
-              ]
-            }
-          }' \
-            | ssh vm "sudo tee /var/lib/hercules-ci-agent/secrets/binary-caches.json"
+  #     - name: Create the agent binary-caches secret
+  #       env:
+  #         ACTIVE: ${{ steps.hercules-ci-agent-active.outputs.active }}
+  #       if: ${{ env.ACTIVE != 'true' }}
+  #       run: |
+  #         echo '{
+  #           "cantcache.me": {
+  #             "kind": "NixCache",
+  #             "storeURI": "${{ secrets.CANT_CACHE_ME_NIX_S3_URI }}",
+  #             "publicKeys": [
+  #               "cantcache.me:Y+FHAKfx7S0pBkBMKpNMQtGKpILAfhmqUSnr5oNwNMs="
+  #             ],
+  #             "signingKeys": [
+  #               "${{ secrets.CANT_CACHE_ME_NIX_SECRET_SIGNING_KEY }}"
+  #             ]
+  #           }
+  #         }' \
+  #           | ssh vm "sudo tee /var/lib/hercules-ci-agent/secrets/binary-caches.json"
 
-      - name: Create the agent cluster join token secret
-        env:
-          ACTIVE: ${{ steps.hercules-ci-agent-active.outputs.active }}
-        if: ${{ env.ACTIVE != 'true' }}
-        run: |
-          echo "${{ secrets.HERCULES_CI_CLUSTER_JOIN_TOKEN }}" \
-            | ssh vm "sudo tee /var/lib/hercules-ci-agent/secrets/cluster-join-token.key"
+  #     - name: Create the agent cluster join token secret
+  #       env:
+  #         ACTIVE: ${{ steps.hercules-ci-agent-active.outputs.active }}
+  #       if: ${{ env.ACTIVE != 'true' }}
+  #       run: |
+  #         echo "${{ secrets.HERCULES_CI_CLUSTER_JOIN_TOKEN }}" \
+  #           | ssh vm "sudo tee /var/lib/hercules-ci-agent/secrets/cluster-join-token.key"
 
-      - name: Fix permissions on the agent secrets directory
-        env:
-          ACTIVE: ${{ steps.hercules-ci-agent-active.outputs.active }}
-        if: ${{ env.ACTIVE != 'true' }}
-        run: |
-          ssh vm <<EOF
-          sudo chown -R hercules-ci-agent /var/lib/hercules-ci-agent
-          sudo chmod o-rwx /var/lib/hercules-ci-agent/secrets
-          EOF
+  #     - name: Fix permissions on the agent secrets directory
+  #       env:
+  #         ACTIVE: ${{ steps.hercules-ci-agent-active.outputs.active }}
+  #       if: ${{ env.ACTIVE != 'true' }}
+  #       run: |
+  #         ssh vm <<EOF
+  #         sudo chown -R hercules-ci-agent /var/lib/hercules-ci-agent
+  #         sudo chmod o-rwx /var/lib/hercules-ci-agent/secrets
+  #         EOF
 
-      - name: Start the agent
-        env:
-          ACTIVE: ${{ steps.hercules-ci-agent-active.outputs.active }}
-        if: ${{ env.ACTIVE != 'true' }}
-        run: ssh vm "sudo systemctl start hercules-ci-agent.service"
+  #     - name: Start the agent
+  #       env:
+  #         ACTIVE: ${{ steps.hercules-ci-agent-active.outputs.active }}
+  #       if: ${{ env.ACTIVE != 'true' }}
+  #       run: ssh vm "sudo systemctl start hercules-ci-agent.service"
 
   terminate-all-nixos-azure-vms:
     name: Terminates all matching NixOS Azure VMs
