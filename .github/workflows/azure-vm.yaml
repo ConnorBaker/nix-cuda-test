@@ -164,7 +164,7 @@ jobs:
         env:
           CACHE_HIT: ${{ steps.restore-vhd.outputs.cache-hit }}
           VHD_BLOB_EXISTS: ${{ steps.check-vhd-blob-exists.outputs.vhd-blob-exists }}
-        if: ${{ env.CACHE_HIT != 'true' && env.VHD_BLOB_EXISTS != 'true' }}
+        if: ${{ env.VHD_BLOB_EXISTS != 'true' }}
         run: |
           az storage blob upload \
             --container-name "${{ secrets.AZURE_STORAGE_CONTAINER }}" \
