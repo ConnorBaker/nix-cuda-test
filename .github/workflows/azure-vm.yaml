@@ -7,7 +7,6 @@ defaults:
 on:
   workflow_dispatch:
     inputs:
-      # TODO: Implement the ability to stop it
       action:
         description: Action
         required: true
@@ -200,37 +199,8 @@ jobs:
               "tenantId": "${{ secrets.AZURE_TENANT_ID }}"
             }
 
-      # TODO(@connorbaker): Allow multiple VMs to be created.
-      - name: Check if VMs are running
-        id: check-vm-running
-        run: |
-          VMS=$(az vm list --resource-group "${{ secrets.AZURE_RESOURCE_GROUP }}")
-          echo "$VMS" | jq
-
-          MATCHING_VMS=$(echo "$VMS" | jq -cr --arg name "${{ env.VHD_NAME }}" 'map(select(.name == $name))')
-          echo "$MATCHING_VMS" | jq
-
-          NUM_MATCHING_VMS=$(echo "$MATCHING_VMS" | jq -cr length)
-          echo "Number of matching VMs: $NUM_MATCHING_VMS"
-          case $NUM_MATCHING_VMS in
-            0)
-              echo "vm-running=false" >> "$GITHUB_OUTPUT"
-              ;;
-            1)
-              echo "vm-running=true" >> "$GITHUB_OUTPUT"
-              ;;
-            *)
-              echo "Multiple VMs with the same name found" >&2
-              echo "$MATCHING_VMS" >&2
-              exit 1
-              ;;
-          esac
-
       - name: Get the VHD blob URL
         id: get-vhd-blob-url
-        env:
-          VM_RUNNING: ${{ steps.check-vm-running.outputs.vm-running }}
-        if: ${{ env.VM_RUNNING != 'true' }}
         run: |
           az storage blob url \
               --container-name "${{ secrets.AZURE_STORAGE_CONTAINER }}" \
@@ -238,12 +208,9 @@ jobs:
             | jq -cr '"vhd-blob-url=\(.)"' \
             | tee -a "$GITHUB_OUTPUT"
 
-      # TODO(@connorbaker): Allow multiple VMs to be created.
       - name: Create the VM
         env:
           VHD_BLOB_URL: ${{ steps.get-vhd-blob-url.outputs.vhd-blob-url }}
-          VM_RUNNING: ${{ steps.check-vm-running.outputs.vm-running }}
-        if: ${{ env.VM_RUNNING != 'true' }}
         run: |
           az vm create \
             --attach-os-disk "${{ env.VHD_BLOB_URL }}" \
@@ -262,9 +229,6 @@ jobs:
             --use-unmanaged-disk
 
       - name: Wait for the VM to be created
-        env:
-          VM_RUNNING: ${{ steps.check-vm-running.outputs.vm-running }}
-        if: ${{ env.VM_RUNNING != 'true' }}
         run: |
           az vm wait \
             --created \
@@ -282,6 +246,7 @@ jobs:
             | tee -a "$GITHUB_OUTPUT"
 
   # TODO(@connorbaker): Refactor to allow setting up multiple VMs.
+  # TODO(@connorbaker): Is this what requires us to manually restart nix-daemon.service and nix-daemon.socket?
   ensure-nixos-azure-vm-hercules-ci-configured:
     name: Ensure NixOS Azure VM has Hercules CI configured
     runs-on: ubuntu-latest
