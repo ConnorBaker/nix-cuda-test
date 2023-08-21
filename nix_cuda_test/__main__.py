@@ -1,8 +1,7 @@
 import argparse
 
 import pytorch_lightning as pl
-import torch
-from torchvision.transforms import Compose, Resize, ToTensor
+from torchvision.transforms import Compose, Resize, ToTensor  # type: ignore[import]
 
 from nix_cuda_test.cifar_data_module import CIFARDataModule
 from nix_cuda_test.wrapped_vit import WrappedViT
@@ -36,7 +35,6 @@ def main():
 
     # torch._dynamo.config.log_level = logging.DEBUG
     # torch._dynamo.config.verbose = True
-
     import torch._inductor.config
 
     torch._inductor.config.compile_threads = 1

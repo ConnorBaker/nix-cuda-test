@@ -3,8 +3,8 @@ from typing import Any
 
 import pytorch_lightning as pl
 from torch.utils.data import DataLoader
-from torchvision.datasets import CIFAR10
-from torchvision.transforms import Compose
+from torchvision.datasets import CIFAR10  # type: ignore[import]
+from torchvision.transforms import Compose  # type: ignore[import]
 
 
 @dataclass(kw_only=True)

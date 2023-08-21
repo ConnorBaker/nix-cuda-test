@@ -46,47 +46,33 @@
         inputs.pre-commit-hooks-nix.flakeModule
         ./nix
       ];
-      perSystem = {
-        config,
-        pkgs,
-        ...
-      }: {
-        config = {
-          cuda = {
-            capabilities = ["8.9"];
-            packages = "cudaPackages_11_8";
-            forwardCompat = false;
-            support = true;
-          };
-          formatter = pkgs.alejandra;
-          nvidia.driver = {
-            hash = "sha256-QH3wyjZjLr2Fj8YtpbixJP/DvM7VAzgXusnCcaI69ts=";
-            version = "535.86.05";
-          };
-          pre-commit.settings = {
-            hooks = {
-              # Nix checks
-              alejandra.enable = true;
-              deadnix.enable = true;
-              nil.enable = true;
-              statix.enable = true;
-              # Python checks
-              black.enable = true;
-              mypy.enable = true;
-              pyright.enable = true;
-              ruff.enable = true;
-            };
-            settings = let
-              # We need to provide wrapped version of mypy and pyright which can find our imports.
-              wrapper = name:
-                pkgs.writeShellScript name ''
-                  source ${config.devShells.nix-cuda-test}
-                  ${name} "$@"
-                '';
-            in {
-              mypy.binPath = "${wrapper "mypy"}";
-              pyright.binPath = "${wrapper "pyright"}";
-            };
+      perSystem = {pkgs, ...}: {
+        cuda = {
+          capabilities = ["8.9"];
+          packages = "cudaPackages_11_8";
+          forwardCompat = false;
+          support = true;
+        };
+        formatter = pkgs.alejandra;
+        nvidia.driver = {
+          hash = "sha256-QH3wyjZjLr2Fj8YtpbixJP/DvM7VAzgXusnCcaI69ts=";
+          version = "535.86.05";
+        };
+        pre-commit = {
+          settings.hooks = {
+            # Nix checks
+            alejandra.enable = true;
+            deadnix.enable = true;
+            nil.enable = true;
+            statix.enable = true;
+            # Python checks
+            black.enable = true;
+            ruff.enable = true;
+            # Python type checkers -- require access to the stubs the environment has.
+            # Unsure how to supply them with those given that they're populated by different hooks
+            # only run inside the environment.
+            mypy.enable = false;
+            pyright.enable = false;
           };
         };
       };

@@ -3,7 +3,7 @@
   config,
   lib,
   # buildInputs
-  cudaPackages,
+  # cudaPackages,
   nixGL ? null,
   # propagatedBuildInputs
   click,
