@@ -1,10 +1,8 @@
 {inputs, ...}: let
   mkApp = drv: inputs.flake-utils.lib.mkApp {inherit drv;};
 in {
-  perSystem = {pkgs, ...}: {
+  perSystem = {packages, ...}: {
     apps = {
-      torch-collect-env = mkApp (pkgs.callPackage ./torch-collect-env.nix {});
-      # xformers-info = mkApp (pkgs.callPackage ./xformers-info.nix {});
     };
   };
 }

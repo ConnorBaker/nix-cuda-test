@@ -32,6 +32,51 @@ on:
           - gpu_8x_a100
           - gpu_8x_a100_80gb_sxm4
           - gpu_8x_v100
+      instance-id:
+        description: Instance ID to use when terminating an instance (defaults to all instances of the given type)
+        required: false
+        type: string
+  workflow_call:
+    inputs:
+      action:
+        description: Action
+        required: true
+        type: string
+      instance-type-name:
+        description: Instance
+        required: true
+        type: string
+      instance-id:
+        description: Instance ID to use when terminating an instance (defaults to all instances of the given type)
+        required: false
+        type: string
+    outputs:
+      json:
+        description: JSON output from the workflow call to launch an instance
+        value: ${{ jobs.launch-lambda-vm.outputs.json }}
+    secrets:
+      CANT_CACHE_ME_NIX_SECRET_SIGNING_KEY:
+        description: Nix secret signing key
+        required: true
+      CLOUDFLARE_R2_ACCESS_KEY_ID:
+        description: Cloudflare R2 access key ID
+        required: true
+      CLOUDFLARE_R2_SECRET_ACCESS_KEY:
+        description: Cloudflare R2 secret access key
+        required: true
+      LAMBDA_CLOUD_RUNNER_API_KEY:
+        description: Lambda Cloud API key
+        required: true
+      RUNNER_AUTH_TOKEN:
+        description: GitHub Runner auth token
+        required: true
+      RUNNER_SSH_PRIVATE_KEY:
+        description: GitHub Runner SSH private key
+        required: true
+      RUNNER_SSH_PUBLIC_KEY:
+        description: GitHub Runner SSH public key
+        required: true
+
 
 jobs:
   launch-lambda-vm:
@@ -141,18 +186,24 @@ jobs:
             exit 1
           fi
 
-          for id in $(jq -cr '.[]' <<< '${{ env.IDS }}'); do
-            echo "Terminating instance $id..."
-            lambda-cloud --info terminate-instance --instance-id "$id"
-          done
+          if [[ "${{ inputs.instance-id }}" != "" ]]; then
+            echo "Terminating instance ${{ inputs.instance-id }}..."
+            lambda-cloud --info terminate-instance --instance-id "${{ inputs.instance-id }}"
+            exit 0
+          elif
+            echo "Terminating all instances matching the name 'github-runner-${{ inputs.instance-type-name }}'..."
+            for id in $(jq -cr '.[]' <<< '${{ env.IDS }}'); do
+              echo "Terminating instance $id..."
+              lambda-cloud --info terminate-instance --instance-id "$id"
+            done
+          fi
 
   # TODO(@connorbaker): Add checks to make idempotent; although the first script will exit with an
   # error if we attempt to set up a VM that already exists.
-  setup-lambda-vm:
-    name: Setup Lambda VM
+  setup-github-runner-lambda-vm:
+    name: Setup GitHub Runner on Lambda VM
     runs-on: ubuntu-latest
     needs: launch-lambda-vm
-    concurrency: lambda-vm-${{ inputs.instance-type-name }}
     steps:
       - name: Set up the GitHub runner SSH keys
         run: |

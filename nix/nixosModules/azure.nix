@@ -6,7 +6,6 @@
   imports = [
     "${modulesPath}/virtualisation/azure-common.nix"
     ./systemd/services/mount-nvmes.nix
-    ./systemd/services/fix-tmp-permissions.nix
   ];
   system.stateVersion = "23.05";
 
@@ -20,11 +19,7 @@
     tmp.cleanOnBoot = true;
   };
 
-  environment = {
-    memoryAllocator.provider = "mimalloc";
-    # TODO(@connorbaker): Cargo-cult, or necessary for remote builders to work?
-    # variables.NIX_REMOTE = "daemon";
-  };
+  environment.memoryAllocator.provider = "mimalloc";
 
   networking = {
     hostName = "nixos-builder";

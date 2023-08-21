@@ -27,33 +27,48 @@ on:
           - gpu_8x_v100
 
 jobs:
+  # TODO(@connorbaker): Label the instance with the ID name as well so only the workflow which 
+  # created it is able to run tests on it?
+  launch-vm:
+    name: Launch Lambda VM
+    concurrency: lambda-vm-test-${{ inputs.instance-type-name }}
+    uses: ./.github/workflows/lambda-vm.yaml
+    with:
+      action: launch
+      instance-type-name: ${{ inputs.instance-type-name }}
+    secrets: inherit
+
   lambda-vm-tests:
     name: Test on Lambda VM
+    needs: launch-vm
     runs-on: ${{ inputs.instance-type-name }}
     concurrency: lambda-vm-test-${{ inputs.instance-type-name }}
-    strategy:
-      fail-fast: false
-      matrix:
-        attribute:
-          - torch-collect-env
-      max-parallel: 1
     steps:
       - name: Checkout
         uses: actions/checkout@v3
 
-      - name: Check if Nix exists
-        id: nix-exists
-        run: |
-          nix --version && echo "json=true" || echo "json=false" \
-            | tee -a "$GITHUB_OUTPUT"
-
       - name: Set up Nix
-        if: ${{ !fromJSON(steps.nix-exists.outputs.json) }}
         uses: ./.github/actions/nix-setup
         with:
           cant-cache-me-nix-secret-signing-key: ${{ secrets.CANT_CACHE_ME_NIX_SECRET_SIGNING_KEY }}
           cloudflare-r2-access-key-id: ${{ secrets.CLOUDFLARE_R2_ACCESS_KEY_ID }}
           cloudflare-r2-secret-access-key: ${{ secrets.CLOUDFLARE_R2_SECRET_ACCESS_KEY }}
 
-      - name: Run ${{ matrix.attribute }}
-        run: nix run --print-build-logs .#${{ matrix.attribute }}
+      - name: Run torch-collect-env
+        run: nix run --print-build-logs .#torch-collect-env
+
+  terminate-vm:
+    name: Terminate Lambda VM
+    needs: 
+      - launch-vm
+      - lambda-vm-tests
+    # NOTE: Unclear on failure mode -- what happens if launch-vm fails?
+    # Because this always runs, I suspect this would trigger the workflow, passing null or the empty string to instance-id.
+    if: always()
+    concurrency: lambda-vm-test-${{ inputs.instance-type-name }}
+    uses: ./.github/workflows/lambda-vm.yaml
+    with:
+      action: terminate
+      instance-id: ${{ fromJSON(needs.launch-vm.outputs.json).id }}
+      instance-type-name: ${{ inputs.instance-type-name }}
+    secrets: inherit
