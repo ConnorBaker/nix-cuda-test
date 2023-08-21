@@ -54,8 +54,8 @@ jobs:
           cloudflare-r2-access-key-id: ${{ secrets.CLOUDFLARE_R2_ACCESS_KEY_ID }}
           cloudflare-r2-secret-access-key: ${{ secrets.CLOUDFLARE_R2_SECRET_ACCESS_KEY }}
 
-      - name: Run torch-collect-env
-        run: nix run --print-build-logs .#torch-collect-env
+      - name: Run torch-cuda-is-available
+        run: nix run --print-build-logs .#torch-cuda-is-available
 
   terminate-vm:
     name: Terminate Lambda VM
