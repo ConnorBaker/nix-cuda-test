@@ -29,9 +29,6 @@
         (_: prev: {
           cudaPackages = prev.${config.cuda.packages};
         })
-        # Override PyTorch so it includes a reference to the libnvidia-ml.so stub
-        (_: prev: {
-        })
       ];
       config = {
         allowUnfree = true;

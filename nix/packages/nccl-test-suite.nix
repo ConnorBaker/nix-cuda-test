@@ -20,11 +20,11 @@ in
       [cudaPackages.nccl-tests]
       ++ lib.optionals wrapWithNixGL [nixGL.nixGLNvidia];
     text = ''
-        for exe in ${cudaPackages.nccl-tests}/bin/*; do
-          if [[ -x "$exe" && -f "$exe" ]]; then
-            echo "Running $exe"
-            ${optionalNixGLWrapper}"$exe"
-          fi
-        done
+      for exe in ${cudaPackages.nccl-tests}/bin/*; do
+        if [[ -x "$exe" && -f "$exe" ]]; then
+          echo "Running $exe"
+          ${optionalNixGLWrapper}"$exe"
+        fi
+      done
     '';
   }
