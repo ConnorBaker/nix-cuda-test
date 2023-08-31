@@ -47,17 +47,22 @@
         ./nix
       ];
       perSystem = {pkgs, ...}: {
-        cuda = {
-          capabilities = ["8.9"];
-          packages = "cudaPackages_11_8";
-          forwardCompat = false;
-          support = true;
+        nix-cuda-test = {
+          cuda = {
+            capabilities = ["8.9"];
+            version = "11.8";
+            forwardCompat = false;
+          };
+          nvidia.driver = {
+            hash = "sha256-L51gnR2ncL7udXY2Y1xG5+2CU63oh7h8elSC4z/L7ck=";
+            version = "535.104.05";
+          };
+          python = {
+            optimize = false;
+            version = "3.10";
+          };
         };
         formatter = pkgs.alejandra;
-        nvidia.driver = {
-          hash = "sha256-QH3wyjZjLr2Fj8YtpbixJP/DvM7VAzgXusnCcaI69ts=";
-          version = "535.86.05";
-        };
         pre-commit = {
           settings.hooks = {
             # Nix checks

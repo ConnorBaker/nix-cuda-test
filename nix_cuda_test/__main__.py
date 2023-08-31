@@ -86,6 +86,7 @@ def main():
         help="weight decay value (default : 0.03)",
     )
     parser.add_argument("--batch-size", type=int, default=64, help="batch size (default : 64)")
+    parser.add_argument("--compile", action="store_true", help="compile the model")
     args = parser.parse_args()
 
     transforms = Compose([Resize(size=(args.img_size, args.img_size), antialias=True), ToTensor()])
@@ -122,9 +123,12 @@ def main():
         strategy="auto",
     )
 
+    if args.compile:
+        model = torch.compile(model)
+
     trainer.fit(
         datamodule=data_module,
-        model=torch.compile(model),
+        model=model,
     )
 
 
