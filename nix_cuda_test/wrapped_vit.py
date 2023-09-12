@@ -66,14 +66,14 @@ class WrappedViT(pl.LightningModule):
         images, labels = batch
         logits: Tensor = self(images)
         loss: Tensor = self.criterion(logits, labels)
-        self.log("train_loss", loss, prog_bar=True)
+        self.log("train_loss", loss, prog_bar=True)  # type: ignore
         return loss
 
     def validation_step(self, batch: Tensor, batch_idx: int) -> Tensor:  # type: ignore[override]
         images, labels = batch
         logits: Tensor = self(images)
         loss: Tensor = self.criterion(logits, labels)
-        self.log("val_loss", loss, prog_bar=True)
+        self.log("val_loss", loss, prog_bar=True)  # type: ignore
         return loss
 
     def configure_optimizers(self) -> Optimizer:

@@ -26,6 +26,7 @@ nix-cuda-test = "nix_cuda_test.__main__:main"
 
 [tool.black]
 line-length = 120
+target-version = ['py310']
 
 [tool.ruff]
 select = [
@@ -38,3 +39,15 @@ select = [
     "I",
 ]
 line-length = 120
+
+[tool.mypy]
+python_version = "3.10"
+platform = "linux"
+strict = true
+# We must ignore unused ignores because pyright might catch them.
+warn_unused_ignores = false
+
+[tool.pyright]
+pythonVersion = "3.10"
+pythonPlatform = "Linux"
+typeCheckingMode = "strict"

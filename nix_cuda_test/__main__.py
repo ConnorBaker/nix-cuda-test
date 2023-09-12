@@ -7,7 +7,7 @@ from nix_cuda_test.cifar_data_module import CIFARDataModule
 from nix_cuda_test.wrapped_vit import WrappedViT
 
 
-def main():
+def main() -> None:
     from lightning_fabric.fabric import Fabric  # type: ignore
 
     Fabric.seed_everything(42, workers=True)
@@ -46,7 +46,7 @@ def main():
     torch._inductor.config.size_asserts = False
     # torch._inductor.config.triton.cudagraphs = True
     # torch._inductor.config.tune_layout = True
-    torch._dynamo.reset()
+    torch._dynamo.reset()  # type: ignore[no-untyped-call]
 
     parser = argparse.ArgumentParser(description="Vision Transformer in PyTorch")
     parser.add_argument(
@@ -89,7 +89,12 @@ def main():
     parser.add_argument("--compile", action="store_true", help="compile the model")
     args = parser.parse_args()
 
-    transforms = Compose([Resize(size=(args.img_size, args.img_size), antialias=True), ToTensor()])
+    transforms = Compose(
+        [
+            Resize(size=(args.img_size, args.img_size), antialias=True),  # type: ignore[assignment]
+            ToTensor(),
+        ]
+    )
     data_module = CIFARDataModule(
         batch_size=args.batch_size,
         data_dir="data",
@@ -124,11 +129,11 @@ def main():
     )
 
     if args.compile:
-        model = torch.compile(model)
+        model = torch.compile(model)  # type: ignore[assignment]
 
     trainer.fit(
         datamodule=data_module,
-        model=model,
+        model=model,  # type: ignore[arg-type]
     )
 
 

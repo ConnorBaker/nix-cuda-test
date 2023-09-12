@@ -10,6 +10,7 @@ Optionally, to test a PR, use `--override-input nixpkgs github:nixos/nixpkgs/<co
 
 ## To-do
 
+- Add support for `treefmt`
 - Matrix `cudaPackages` and `cudaCapabilities` to provide multiple variants of the same package
 - Investigate the performance impact of using an optimized python build
 

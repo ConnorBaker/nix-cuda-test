@@ -27,7 +27,6 @@
   };
 
   nixConfig = {
-    # Add my own cache and the CUDA maintainer's cache
     extra-substituters = [
       "https://cuda-maintainers.cachix.org"
     ];
@@ -46,7 +45,11 @@
         inputs.pre-commit-hooks-nix.flakeModule
         ./nix
       ];
-      perSystem = {pkgs, ...}: {
+      perSystem = {
+        config,
+        pkgs,
+        ...
+      }: {
         nix-cuda-test = {
           cuda = {
             capabilities = ["8.9"];
@@ -63,8 +66,8 @@
           };
         };
         formatter = pkgs.alejandra;
-        pre-commit = {
-          settings.hooks = {
+        pre-commit.settings = {
+          hooks = {
             # Nix checks
             alejandra.enable = true;
             deadnix.enable = true;
@@ -72,12 +75,23 @@
             statix.enable = true;
             # Python checks
             black.enable = true;
+            mypy.enable = true;
+            pyright.enable = true;
             ruff.enable = true;
-            # Python type checkers -- require access to the stubs the environment has.
-            # Unsure how to supply them with those given that they're populated by different hooks
-            # only run inside the environment.
-            mypy.enable = false;
-            pyright.enable = false;
+          };
+          settings = let
+            # We need to provide wrapped version of mypy and pyright which can find our imports.
+            # TODO: The script we're sourcing is an implementation detail of `mkShell` and we should
+            # not depend on it exisitng. In fact, the first few lines of the file state as much
+            # (that's why we need to strip them, sourcing only the content of the script).
+            wrapper = name:
+              pkgs.writeShellScript name ''
+                source <(sed -n '/^declare/,$p' ${config.devShells.nix-cuda-test})
+                ${name} "$@"
+              '';
+          in {
+            mypy.binPath = "${wrapper "mypy"}";
+            pyright.binPath = "${wrapper "pyright"}";
           };
         };
       };
