@@ -24,6 +24,10 @@
       };
       url = "github:cachix/pre-commit-hooks.nix";
     };
+    treefmt-nix = {
+      inputs.nixpkgs.follows = "nixpkgs";
+      url = "github:numtide/treefmt-nix";
+    };
   };
 
   nixConfig = {
@@ -42,6 +46,7 @@
     inputs.flake-parts.lib.mkFlake {inherit inputs;} {
       systems = ["x86_64-linux"];
       imports = [
+        inputs.treefmt-nix.flakeModule
         inputs.pre-commit-hooks-nix.flakeModule
         ./nix
       ];
@@ -65,19 +70,20 @@
             version = "3.10";
           };
         };
-        formatter = pkgs.alejandra;
         pre-commit.settings = {
           hooks = {
+            # Formatter checks
+            treefmt.enable = true;
+
             # Nix checks
-            alejandra.enable = true;
             deadnix.enable = true;
             nil.enable = true;
             statix.enable = true;
+
             # Python checks
-            black.enable = true;
             mypy.enable = true;
             pyright.enable = true;
-            ruff.enable = true;
+            ruff.enable = true; # Ruff both lints and checks sorted imports
           };
           settings = let
             # We need to provide wrapped version of mypy and pyright which can find our imports.
@@ -90,8 +96,31 @@
                 ${name} "$@"
               '';
           in {
+            # Formatter
+            treefmt.package = config.treefmt.build.wrapper;
+
+            # Python
             mypy.binPath = "${wrapper "mypy"}";
             pyright.binPath = "${wrapper "pyright"}";
+          };
+        };
+
+        treefmt = {
+          projectRootFile = "flake.nix";
+          programs = {
+            # Markdown
+            mdformat.enable = true;
+
+            # Nix
+            alejandra.enable = true;
+
+            # Python
+            black.enable = true;
+            ruff.enable = true; # Ruff both lints and checks sorted imports
+
+            # Shell
+            shellcheck.enable = true;
+            shfmt.enable = true;
           };
         };
       };
