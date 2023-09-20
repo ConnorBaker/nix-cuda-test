@@ -8,7 +8,7 @@
   wrapWithNixGL ? false,
 }:
 assert wrapWithNixGL -> nixGL != null; let
-  optionalNixGLWrapper = lib.optionalString wrapWithNixGL "${nixGL.nixGLNvidia.name} ";
+  optionalNixGLWrapper = lib.optionalString wrapWithNixGL "${lib.getExe nixGL.nixGLNvidia} ";
 in
   writeShellApplication {
     name =
