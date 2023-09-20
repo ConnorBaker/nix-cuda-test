@@ -56,8 +56,8 @@ assert wrapWithNixGL -> nixGL != null; let
     ];
     postInstall = lib.optionalString wrapWithNixGL ''
       mv $out/bin/nix-cuda-test $out/bin/.nix-cuda-test-wrapped
-      echo '#!${stdenv.shell}' > $out/bin/nix-cuda-test
-      echo '${nixGL.nixGLNvidia.name} $out/bin/.nix-cuda-test-wrapped "$@"' >> $out/bin/nix-cuda-test
+      echo '#!${stdenv.shell}' > $out/bin/${attrs.pname}
+      echo '${nixGL.nixGLNvidia.name} $out/bin/.nix-cuda-test-wrapped "$@"' >> $out/bin/${attrs.pname}
     '';
     meta = with lib; {
       description = "A test of CUDA with nixpkgs";
