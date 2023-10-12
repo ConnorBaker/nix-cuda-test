@@ -58,7 +58,7 @@
         nix-cuda-test = {
           cuda = {
             capabilities = ["8.9"];
-            version = "11.8";
+            version = "12.0";
             forwardCompat = false;
           };
           nvidia.driver = {

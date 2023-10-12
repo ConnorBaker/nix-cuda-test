@@ -2,6 +2,8 @@
   buildPythonPackage,
   config,
   lib,
+  # nativeBuildInputs
+  flit-core,
   # buildInputs
   # cudaPackages,
   nixGL ? null,
@@ -25,11 +27,12 @@ assert wrapWithNixGL -> nixGL != null; let
   attrs = {
     pname = "nix-cuda-test" + lib.optionalString wrapWithNixGL "-nixGL";
     version = "0.1.0";
-    format = "flit";
+    format = "pyproject";
     src = lib.sources.sourceByRegex ../.. [
       "nix_cuda_test(:?/.*)?"
       "pyproject.toml"
     ];
+    nativeBuildInputs = [flit-core];
     buildInputs = lib.optionals wrapWithNixGL [nixGL.nixGLNvidia];
     propagatedBuildInputs = [
       click
