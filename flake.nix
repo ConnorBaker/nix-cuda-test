@@ -14,7 +14,8 @@
       inputs.nixpkgs.follows = "nixpkgs";
       url = "github:nix-community/nixos-generators";
     };
-    nixpkgs.url = "github:NixOS/nixpkgs";
+    # nixpkgs.url = "github:ConnorBaker/nixpkgs/feat/cuda-redist-multiple-arch";
+    nixpkgs.url = "github:ConnorBaker/nixpkgs/pytorch";
     nixpkgs-lib.url = "github:nix-community/nixpkgs.lib";
     pre-commit-hooks-nix = {
       inputs = {
@@ -61,17 +62,15 @@
         nix-cuda-test = {
           cuda = {
             capabilities = ["8.9"];
-            version = "12.0";
+            version = "11.8";
             forwardCompat = false;
           };
           nvidia.driver = {
             hash = "sha256-L51gnR2ncL7udXY2Y1xG5+2CU63oh7h8elSC4z/L7ck=";
             version = "535.104.05";
           };
-          python = {
-            optimize = false;
-            version = "3.10";
-          };
+          # Just use whatever the default is for now.
+          # python.version = "3.11";
         };
         pre-commit.settings = {
           hooks = {

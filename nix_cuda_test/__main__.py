@@ -12,12 +12,6 @@ def main() -> None:
 
     Fabric.seed_everything(42, workers=True)
 
-    import os
-
-    os.environ["NCCL_NSOCKS_PERTHREAD"] = "8"
-    os.environ["NCCL_SOCKET_NTHREADS"] = "4"
-    os.environ["TORCH_CUDNN_V8_API_ENABLED"] = "1"
-
     import torch.backends.cuda
 
     torch.backends.cuda.matmul.allow_tf32 = True
@@ -31,22 +25,22 @@ def main() -> None:
     # See: https://pytorch.org/docs/stable/generated/torch.set_float32_matmul_precision.html
     torch.set_float32_matmul_precision("medium")  # type: ignore
 
-    import torch._dynamo.config
+    # import torch._dynamo.config
 
-    # torch._dynamo.config.log_level = logging.DEBUG
-    # torch._dynamo.config.verbose = True
-    import torch._inductor.config
+    # # torch._dynamo.config.log_level = logging.DEBUG
+    # # torch._dynamo.config.verbose = True
+    # import torch._inductor.config
 
-    torch._inductor.config.compile_threads = 1
-    torch._inductor.config.dce = True
-    torch._inductor.config.epilogue_fusion = True
-    torch._inductor.config.permute_fusion = True
-    torch._inductor.config.reordering = True
-    # torch._inductor.config.shape_padding = True
-    torch._inductor.config.size_asserts = False
-    # torch._inductor.config.triton.cudagraphs = True
-    # torch._inductor.config.tune_layout = True
-    torch._dynamo.reset()  # type: ignore[no-untyped-call]
+    # torch._inductor.config.compile_threads = 1
+    # torch._inductor.config.dce = True
+    # torch._inductor.config.epilogue_fusion = True
+    # torch._inductor.config.permute_fusion = True
+    # torch._inductor.config.reordering = True
+    # # torch._inductor.config.shape_padding = True
+    # torch._inductor.config.size_asserts = False
+    # # torch._inductor.config.triton.cudagraphs = True
+    # # torch._inductor.config.tune_layout = True
+    # torch._dynamo.reset()  # type: ignore[no-untyped-call]
 
     parser = argparse.ArgumentParser(description="Vision Transformer in PyTorch")
     parser.add_argument(
