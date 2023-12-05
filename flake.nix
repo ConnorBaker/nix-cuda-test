@@ -66,7 +66,7 @@
               forwardCompat = false;
             };
             nvidia.driver = {
-              hash = "";
+              hash = "sha256-grxVZ2rdQ0FsFG5wxiTI3GrxbMBMcjhoDFajDgBFsXs=";
               version = "545.29.06";
             };
             # Just use whatever the default is for now.
