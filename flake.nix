@@ -9,13 +9,11 @@
       inputs.nixpkgs.follows = "nixpkgs";
       url = "github:guibou/nixGL";
     };
-    nixos-generators = {
-      inputs.nixlib.follows = "nixpkgs-lib";
+    nixfmt = {
       inputs.nixpkgs.follows = "nixpkgs";
-      url = "github:nix-community/nixos-generators";
+      url = "github:piegamesde/nixfmt/21ef16e7fe9011ecd77ba05fa5873287e4c0d2a4";
     };
-    # nixpkgs.url = "github:ConnorBaker/nixpkgs/feat/cuda-redist-multiple-arch";
-    nixpkgs.url = "github:ConnorBaker/nixpkgs/pytorch";
+    nixpkgs.url = "github:nixos/nixpkgs";
     nixpkgs-lib.url = "github:nix-community/nixpkgs.lib";
     pre-commit-hooks-nix = {
       inputs = {
@@ -32,18 +30,16 @@
   };
 
   nixConfig = {
-    extra-substituters = [
-      "https://cuda-maintainers.cachix.org"
-    ];
-    extra-trusted-substituters = [
-      "https://cuda-maintainers.cachix.org"
-    ];
+    allow-import-from-derivation = true; # For nixfmt
+    extra-substituters = ["https://cuda-maintainers.cachix.org"];
+    extra-trusted-substituters = ["https://cuda-maintainers.cachix.org"];
     extra-trusted-public-keys = [
       "cuda-maintainers.cachix.org-1:0dq3bujKpuEPMCX6U4WylrUDZ9JyUG0VpVZa7CNfq5E="
     ];
   };
 
-  outputs = inputs:
+  outputs =
+    inputs:
     inputs.flake-parts.lib.mkFlake {inherit inputs;} {
       systems = [
         "aarch64-linux"
@@ -54,77 +50,94 @@
         inputs.pre-commit-hooks-nix.flakeModule
         ./nix
       ];
-      perSystem = {
-        config,
-        pkgs,
-        ...
-      }: {
-        nix-cuda-test = {
-          cuda = {
-            capabilities = ["8.9"];
-            version = "11.8";
-            forwardCompat = false;
+      perSystem =
+        {
+          config,
+          inputs',
+          lib,
+          pkgs,
+          ...
+        }:
+        {
+          nix-cuda-test = {
+            cuda = {
+              capabilities = ["8.9"];
+              version = "11.8";
+              forwardCompat = false;
+            };
+            nvidia.driver = {
+              hash = "";
+              version = "545.29.06";
+            };
+            # Just use whatever the default is for now.
+            # python.version = "3.11";
           };
-          nvidia.driver = {
-            hash = "sha256-L51gnR2ncL7udXY2Y1xG5+2CU63oh7h8elSC4z/L7ck=";
-            version = "535.104.05";
+          pre-commit.settings = {
+            hooks = {
+              # Formatter checks
+              treefmt.enable = true;
+
+              # Nix checks
+              deadnix.enable = true;
+              nil.enable = true;
+              statix.enable = true;
+
+              # Python checks
+              mypy.enable = true;
+              pyright.enable = true;
+              ruff.enable = true; # Ruff both lints and checks sorted imports
+            };
+            settings =
+              let
+                # We need to provide wrapped version of mypy and pyright which can find our imports.
+                # TODO: The script we're sourcing is an implementation detail of `mkShell` and we should
+                # not depend on it exisitng. In fact, the first few lines of the file state as much
+                # (that's why we need to strip them, sourcing only the content of the script).
+                wrapper =
+                  name:
+                  pkgs.writeShellScript name ''
+                    source <(sed -n '/^declare/,$p' ${config.devShells.nix-cuda-test})
+                    ${name} "$@"
+                  '';
+              in
+              {
+                # Formatter
+                treefmt.package = config.treefmt.build.wrapper;
+
+                # Python
+                mypy.binPath = "${wrapper "mypy"}";
+                pyright.binPath = "${wrapper "pyright"}";
+              };
           };
-          # Just use whatever the default is for now.
-          # python.version = "3.11";
+
+          treefmt = {
+            projectRootFile = "flake.nix";
+            programs = {
+              # Markdown
+              mdformat.enable = true;
+
+              # Nix
+              nixfmt.enable = true;
+
+              # Python
+              ruff.enable = true;
+
+              # Shell
+              shellcheck.enable = true;
+              shfmt.enable = true;
+            };
+            # Use our own nixfmt which implements RF101.
+            settings.formatter.nixfmt.command =
+              let
+                inherit (pkgs.haskellPackages) callCabal2nix;
+                inherit (pkgs.haskell.lib) doJailbreak justStaticExecutables;
+              in
+              lib.pipe (callCabal2nix "nixfmt" inputs.nixfmt {}) [
+                doJailbreak
+                justStaticExecutables
+                lib.mkForce
+              ];
+          };
         };
-        pre-commit.settings = {
-          hooks = {
-            # Formatter checks
-            treefmt.enable = true;
-
-            # Nix checks
-            deadnix.enable = true;
-            nil.enable = true;
-            statix.enable = true;
-
-            # Python checks
-            mypy.enable = true;
-            pyright.enable = true;
-            ruff.enable = true; # Ruff both lints and checks sorted imports
-          };
-          settings = let
-            # We need to provide wrapped version of mypy and pyright which can find our imports.
-            # TODO: The script we're sourcing is an implementation detail of `mkShell` and we should
-            # not depend on it exisitng. In fact, the first few lines of the file state as much
-            # (that's why we need to strip them, sourcing only the content of the script).
-            wrapper = name:
-              pkgs.writeShellScript name ''
-                source <(sed -n '/^declare/,$p' ${config.devShells.nix-cuda-test})
-                ${name} "$@"
-              '';
-          in {
-            # Formatter
-            treefmt.package = config.treefmt.build.wrapper;
-
-            # Python
-            mypy.binPath = "${wrapper "mypy"}";
-            pyright.binPath = "${wrapper "pyright"}";
-          };
-        };
-
-        treefmt = {
-          projectRootFile = "flake.nix";
-          programs = {
-            # Markdown
-            mdformat.enable = true;
-
-            # Nix
-            alejandra.enable = true;
-
-            # Python
-            black.enable = true;
-            ruff.enable = true; # Ruff both lints and checks sorted imports
-
-            # Shell
-            shellcheck.enable = true;
-            shfmt.enable = true;
-          };
-        };
-      };
     };
 }

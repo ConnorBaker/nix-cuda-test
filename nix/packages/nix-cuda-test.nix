@@ -23,7 +23,8 @@
   # Config
   wrapWithNixGL ? false,
 }:
-assert wrapWithNixGL -> nixGL != null; let
+assert wrapWithNixGL -> nixGL != null;
+let
   attrs = {
     pname = "nix-cuda-test" + lib.optionalString wrapWithNixGL "-nixGL";
     version = "0.1.0";
@@ -76,4 +77,4 @@ assert wrapWithNixGL -> nixGL != null; let
     };
   };
 in
-  buildPythonPackage attrs
+buildPythonPackage attrs

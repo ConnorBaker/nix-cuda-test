@@ -1,7 +1,12 @@
-{pkgs, ...}: let
+{pkgs, ...}:
+let
   app = pkgs.writeShellApplication {
     name = "mount-nvme-drives";
-    runtimeInputs = with pkgs; [e2fsprogs lvm2 util-linux];
+    runtimeInputs = with pkgs; [
+      e2fsprogs
+      lvm2
+      util-linux
+    ];
     text = ''
       # Wait for any nvme*n1 devices to appear in 10 second intervals
       while ! ls /dev/nvme*n1; do
@@ -63,7 +68,8 @@
       fi
     '';
   };
-in {
+in
+{
   systemd.services.mount-nvmes = {
     description = "Mount the NVMe drives";
     script = app.text;

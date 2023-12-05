@@ -2,6 +2,7 @@ __pycache__
 result
 data
 lightning_logs
+.mypy_cache
 .vscode
 .ruff_cache
 .env
