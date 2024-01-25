@@ -4,6 +4,7 @@ let
   inherit (lib.types)
     bool
     nonEmptyListOf
+    nullOr
     str
     submodule
     ;
@@ -38,8 +39,8 @@ in
               version = mkOption {
                 description = "CUDA version to use";
                 example = "11.8";
-                type = str;
-                default = pkgs.cudaPackages.cudaVersion;
+                type = nullOr str;
+                default = null;
               };
             };
           };

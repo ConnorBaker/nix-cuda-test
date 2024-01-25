@@ -71,7 +71,11 @@
               cudaPackagesAttributeVersion = builtins.replaceStrings ["."] ["_"] cfg.cuda.version;
             in
             {
-              cudaPackages = prev."cudaPackages_${cudaPackagesAttributeVersion}";
+              cudaPackages =
+                if cfg.cuda.version != null then
+                  prev."cudaPackages_${cudaPackagesAttributeVersion}"
+                else
+                  prev.cudaPackages;
             }
           )
         ];
