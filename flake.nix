@@ -11,7 +11,7 @@
     };
     nixfmt = {
       inputs.nixpkgs.follows = "nixpkgs";
-      url = "github:piegamesde/nixfmt/21ef16e7fe9011ecd77ba05fa5873287e4c0d2a4";
+      url = "github:piegamesde/nixfmt/405157900171ac943ed9212b2ab9ab363b01be0b";
     };
     nixpkgs.url = "github:nixos/nixpkgs";
     nixpkgs-lib.url = "github:nix-community/nixpkgs.lib";
@@ -62,7 +62,8 @@
           nix-cuda-test = {
             cuda = {
               capabilities = ["8.9"];
-              version = "11.8";
+              # Use the default version of cudaPackages.
+              # version = "12.2";
               forwardCompat = false;
             };
             nvidia.driver = {
