@@ -9,10 +9,6 @@
       inputs.nixpkgs.follows = "nixpkgs";
       url = "github:guibou/nixGL";
     };
-    nixfmt = {
-      inputs.nixpkgs.follows = "nixpkgs";
-      url = "github:piegamesde/nixfmt/405157900171ac943ed9212b2ab9ab363b01be0b";
-    };
     nixpkgs.url = "github:nixos/nixpkgs";
     nixpkgs-lib.url = "github:nix-community/nixpkgs.lib";
     pre-commit-hooks-nix = {
@@ -118,7 +114,10 @@
               mdformat.enable = true;
 
               # Nix
-              nixfmt.enable = true;
+              nixfmt = {
+                enable = true;
+                package = pkgs.nixfmt-rfc-style;
+              };
 
               # Python
               ruff.enable = true;
@@ -127,17 +126,6 @@
               shellcheck.enable = true;
               shfmt.enable = true;
             };
-            # Use our own nixfmt which implements RF101.
-            settings.formatter.nixfmt.command =
-              let
-                inherit (pkgs.haskellPackages) callCabal2nix;
-                inherit (pkgs.haskell.lib) doJailbreak justStaticExecutables;
-              in
-              lib.pipe (callCabal2nix "nixfmt" inputs.nixfmt {}) [
-                doJailbreak
-                justStaticExecutables
-                lib.mkForce
-              ];
           };
         };
     };
