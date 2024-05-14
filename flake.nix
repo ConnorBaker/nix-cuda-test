@@ -68,8 +68,20 @@
             # Just use whatever the default is for now.
             # python.version = "3.11";
           };
-          pre-commit.settings = {
-            hooks = {
+          pre-commit.settings.hooks =
+            let
+              # We need to provide wrapped version of mypy and pyright which can find our imports.
+              # TODO: The script we're sourcing is an implementation detail of `mkShell` and we should
+              # not depend on it exisitng. In fact, the first few lines of the file state as much
+              # (that's why we need to strip them, sourcing only the content of the script).
+              wrapper =
+                name:
+                pkgs.writeShellScript name ''
+                  source <(sed -n '/^declare/,$p' ${config.devShells.nix-cuda-test})
+                  ${name} "$@"
+                '';
+            in
+            {
               # Formatter checks
               treefmt = {
                 enable = true;
@@ -82,29 +94,16 @@
               statix.enable = true;
 
               # Python checks
-              mypy.enable = true;
-              pyright.enable = true;
+              mypy = {
+                enable = true;
+                settings.binPath = "${wrapper "mypy"}";
+              };
+              pyright = {
+                enable = true;
+                settings.binPath = "${wrapper "pyright"}";
+              };
               ruff.enable = true; # Ruff both lints and checks sorted imports
             };
-            settings =
-              let
-                # We need to provide wrapped version of mypy and pyright which can find our imports.
-                # TODO: The script we're sourcing is an implementation detail of `mkShell` and we should
-                # not depend on it exisitng. In fact, the first few lines of the file state as much
-                # (that's why we need to strip them, sourcing only the content of the script).
-                wrapper =
-                  name:
-                  pkgs.writeShellScript name ''
-                    source <(sed -n '/^declare/,$p' ${config.devShells.nix-cuda-test})
-                    ${name} "$@"
-                  '';
-              in
-              {
-                # Python
-                mypy.binPath = "${wrapper "mypy"}";
-                pyright.binPath = "${wrapper "pyright"}";
-              };
-          };
 
           treefmt = {
             projectRootFile = "flake.nix";

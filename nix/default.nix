@@ -50,18 +50,6 @@
               inherit python3;
             }
           )
-          # TODO: Upstream this.
-          # torchmetrics requires lightning utilities in newer versions.
-          # https://github.com/Lightning-AI/torchmetrics/blob/7e9b18f58213c5cacbac4c66f09da71b3f233c55/requirements/base.txt#L9
-          (_: prev: {
-            pythonPackagesExtensions = prev.pythonPackagesExtensions ++ [
-              (pythonFinal: pythonPrev: {
-                torchmetrics = pythonPrev.torchmetrics.overridePythonAttrs (oldAttrs: {
-                  propagatedBuildInputs = oldAttrs.propagatedBuildInputs ++ [ pythonFinal.lightning-utilities ];
-                });
-              })
-            ];
-          })
           # Change the default version of CUDA used, wrap backendStdenv and cuda_nvcc in ccache
           (
             _: prev:
