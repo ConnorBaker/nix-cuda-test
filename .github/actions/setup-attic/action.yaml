@@ -1,0 +1,53 @@
+name: Set up Attic
+
+description: Set up Attic to push to direct.cantcache.me
+
+inputs:
+  cache-key:
+    description: The Attic cache key
+    required: true
+  rev:
+    description: The Attic revision to install
+    required: false
+    default: 4dbdbee45728d8ce5788db6461aaaa89d98081f0
+
+runs:
+  using: composite
+  steps:
+    - name: Install Attic
+      shell: bash
+      run: |
+        nix profile install \
+          --print-build-logs \
+          --profile "$HOME/.nix-profile" \
+          "github:zhaofengli/attic/${{ inputs.rev }}#attic"
+
+    - name: Create a user for Attic
+      shell: bash
+      run: sudo useradd --system --home-dir /var/lib/attic-watch-store attic-watch-store
+    
+    # The service is templated when run, so it should be able to use attic from
+    # the profile of the user running the `cat` command.
+    - name: Set up a systemd service for Attic
+      shell: bash
+      run: |
+        cat <<EOF | sudo tee /etc/systemd/system/attic-watch-store.service
+        [Service]
+        User=attic-watch-store
+        Group=attic-watch-store
+        StateDirectory=attic-watch-store
+        ExecStartPre=$(which attic) login cuda-server-push https://direct.cantcache.me/ "${{ inputs.cache-key }}"
+        ExecStart=$(which attic) watch-store cuda-server-push:cuda
+        Restart=on-failure
+        RestartSec=5s
+        StartLimitBurst=3
+        Type=simple
+        EOF
+
+    - name: Start the Attic service
+      shell: bash
+      run: |
+        sudo systemctl daemon-reload
+        sudo systemctl enable attic-watch-store
+        sudo systemctl start attic-watch-store
+

@@ -1,0 +1,52 @@
+name: Run nix build on Azure VM
+
+defaults:
+  run:
+    shell: bash
+
+on:
+  workflow_dispatch:
+    inputs:
+      size:
+        description: Instance
+        required: true
+        type: choice
+        # All numbers are for spot instances in East US as of 2023-06-03.
+        # Standard_HB120rs_v3:
+        # - https://learn.microsoft.com/en-us/azure/virtual-machines/hbv3-series
+        # - 120 AMD EPYC™ 7V73X (Milan-X) CPU cores
+        # - 448 GB of RAM
+        # - 2 * 960 GB SSD
+        # - $0.37/hour
+        # Standard_NC8as_T4_v3:
+        # - https://learn.microsoft.com/en-us/azure/virtual-machines/nct4-v3-series
+        # - 1x NVIDIA Tesla T4 GPU with 16 GB of RAM
+        # - 8 AMD EPYC 7V12 (Rome) CPU cores
+        # - 56 GB of RAM
+        # - 1 * 360 GB SSD
+        # - $0.14/hour
+        # Standard_NV36ads_A10_v5:
+        # - https://learn.microsoft.com/en-us/azure/virtual-machines/nva10v5-series
+        # - 1x NVIDIA A10 GPU with 24 GB of RAM
+        # - 36 AMD EPYC 74F3V(Milan) CPU cores
+        # - 440 GB of RAM
+        # - 1 * 1440 GB SSD
+        # - $1.28/hour
+        options:
+          - Standard_HB120rs_v3
+          # - Standard_NC8as_T4_v3
+          # - Standard_NV36ads_A10_v5
+
+jobs:
+  build-nix-cuda-test:
+    name: Build nix-cuda-test
+    runs-on:
+      - ${{ inputs.size }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Attic
+        uses: ./.github/actions/setup-attic
+        with:
+          cache-key: ${{ secrets.NIX_CUDA_TEST_ATTIC_CACHE_KEY }}
+      - name: Build nix-cuda-test
+        run: nix build --print-build-logs --no-link .#nix-cuda-test

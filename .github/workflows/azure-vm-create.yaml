@@ -4,6 +4,8 @@ defaults:
   run:
     shell: bash
 
+# TODO: This is madness. Just use nixos-anywhere. (Assuming it works.)
+
 on:
   workflow_dispatch:
     inputs:
@@ -45,54 +47,54 @@ on:
           # - Standard_NV36ads_A10_v5
 
 jobs:
-  # github-check-for-runner:
-  #   name: Check for runner (GitHub)
-  #   runs-on: ubuntu-latest
-  #   if: ${{ inputs.action == 'start' }}
-  #   outputs:
-  #     # NOTE: Returns the ID of the matching runner, or -1 if no matching runner is found.
-  #     id: ${{ steps.id.outputs.value }}
-  #   steps:
-  #     - name: Query GitHub for runners
-  #       id: runners
-  #       env:
-  #         # We require admin read access to the repository to query the runners.
-  #         # TODO: Expires on Thu, Jun 13 2024.
-  #         GH_TOKEN: ${{ secrets.NIX_CUDA_TEST_GH_TOKEN_ADMIN_READ }}
-  #       run: |
-  #         gh api \
-  #           -H "Accept: application/vnd.github+json" \
-  #           -H "X-GitHub-Api-Version: 2022-11-28" \
-  #           /repos/ConnorBaker/nix-cuda-test/actions/runners \
-  #         | jq -crS '.runners' \
-  #         | xargs --null printf "json=%s" \
-  #         | tee -a "$GITHUB_OUTPUT"
+  github-check-for-runner:
+    name: Check for runner (GitHub)
+    runs-on: ubuntu-latest
+    if: ${{ inputs.action == 'start' }}
+    outputs:
+      # NOTE: Returns the ID of the matching runner, or -1 if no matching runner is found.
+      id: ${{ steps.id.outputs.value }}
+    steps:
+      - name: Query GitHub for runners
+        id: runners
+        env:
+          # We require admin read access to the repository to query the runners.
+          # TODO: Expires on Thu, Jun 13 2024.
+          GH_TOKEN: ${{ secrets.NIX_CUDA_TEST_GH_TOKEN_ADMIN_READ }}
+        run: |
+          gh api \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            /repos/ConnorBaker/nix-cuda-test/actions/runners \
+          | jq -crS '.runners' \
+          | xargs -0 printf "json=%s" \
+          | tee -a "$GITHUB_OUTPUT"
 
-  #     - name: Filter the runners by size and status
-  #       id: matching-runners
-  #       run: |
-  #         jq -crS \
-  #           --arg size "${{ inputs.size }}" \
-  #           'map(select(.name == $size and .status == "online"))' \
-  #           <<< "${{ steps.runners.outputs.json }}" \
-  #         | xargs --null printf "json=%s" \
-  #         | tee -a "$GITHUB_OUTPUT"
+      - name: Filter the runners by size and status
+        id: matching-runners
+        run: |
+          jq -crS \
+            --arg size "${{ inputs.size }}" \
+            'map(select(.name == $size and .status == "online"))' \
+            <<< '${{ steps.runners.outputs.json }}' \
+          | xargs -0 printf "json=%s" \
+          | tee -a "$GITHUB_OUTPUT"
 
-  #     - name: Get the ID of the matching runners
-  #       id: id
-  #       run: |
-  #         declare -i length=$(jq -crS 'length' <<< "${{ steps.matching-runners.outputs.json }}")
-  #         declare -i id=-1
-  #         if (( length == 0 )); then
-  #           echo "No matching runner found."
-  #         elif (( length == 1 )); then
-  #           echo "Matching runner found."
-  #           id=$(jq -crS '.[0].id' <<< "${{ steps.matching-runners.outputs.json }}")
-  #         else
-  #           echo "Multiple matching runners found!"
-  #           exit 1
-  #         fi
-  #         echo "value=$id" | tee -a "$GITHUB_OUTPUT"
+      - name: Get the ID of the matching runners
+        id: id
+        run: |
+          declare -ri length=$(jq -crS 'length' <<< '${{ steps.matching-runners.outputs.json }}')
+          declare -i id=-1
+          if (( length == 0 )); then
+            echo "No matching runner found."
+          elif (( length == 1 )); then
+            echo "Matching runner found."
+            id=$(jq -crS '.[0].id' <<< '${{ steps.matching-runners.outputs.json }}')
+          else
+            echo "Multiple matching runners found!"
+            exit 1
+          fi
+          echo "value=$id" | tee -a "$GITHUB_OUTPUT"
 
   azure-check-for-instance:
     name: Check for instance (Azure)
@@ -100,43 +102,206 @@ jobs:
     permissions: 
       contents: read
       id-token: write
+    outputs:
+      ip: ${{ steps.ip.outputs.value }}
     steps:
-      - uses: actions/checkout@v4
       - name: Log in to Azure
         uses: Azure/login@v2
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-      - name: Azure CLI script
+
+      - name: Check for instance
+        id: instance
         uses: azure/CLI@v1
         with:
           azcliversion: latest
           inlineScript: |
-            export AZURE_RESOURCE_GROUP="NixCudaTest"
-            export AZURE_INSTANCE_SIZE="${{ inputs.size }}"
-            export AZURE_INSTANCE_NAME="${AZURE_INSTANCE_SIZE:?}"
-            chmod +x "$GITHUB_WORKSPACE/ci/azure-check-for-instance.sh"
-            "$GITHUB_WORKSPACE/ci/azure-check-for-instance.sh"
+            if
+              az vm show \
+                --show-details \
+                --resource-group NixCudaTest \
+                --name "${{ inputs.size }}" \
+              | jq -crS . \
+              | xargs -0 printf "json=%s" \
+              | tee -a "$GITHUB_OUTPUT"
+            then
+              echo "Instance ${{ inputs.size }} exists"
+            else
+              echo "Instance ${{ inputs.size }} does not exist"
+            fi
 
-  # create-running-instance:
-  #   name: Create instance
-  #   runs-on: ubuntu-latest
-  #   # needs: github-check-for-runner
-  #   # if: ${{ inputs.action == 'start' && needs.github-check-for-runner.outputs.id == -1 }}
-  #   permissions: 
-  #     contents: read
-  #     id-token: write
-  #   steps:
-  #     - name: Log in to Azure
-  #       uses: Azure/login@v2
-  #       with:
-  #         client-id: ${{ secrets.AZURE_CLIENT_ID }}
-  #         subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-  #         tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-  #     - name: Azure CLI script
-  #       uses: azure/CLI@v1
-  #       with:
-  #         azcliversion: latest
-  #         inlineScript: |
-  #           az account show
+      # IP is "" if the instance does not exist.
+      - name: Get instance IP
+        id: ip
+        run: |
+          jq -crS \
+            '.publicIps' \
+            <<< '${{ steps.instance.outputs.json }}' \
+          | xargs -0 printf "value=%s" \
+          | tee -a "$GITHUB_OUTPUT"
+
+  create-running-instance:
+    name: Create instance
+    runs-on: ubuntu-latest
+    needs: 
+      - azure-check-for-instance
+      - github-check-for-runner
+    if: ${{ inputs.action == 'start' && needs.github-check-for-runner.outputs.id == -1 || needs.azure-check-for-instance.outputs.ip == 'null' }}
+    permissions: 
+      contents: read
+      id-token: write
+    steps:
+      - name: Test pre-conditions
+        run: |
+          declare -ri id=${{ needs.github-check-for-runner.outputs.id }}
+          declare -r ip=${{ needs.azure-check-for-instance.outputs.ip }}
+
+          declare GH_RUNNER_STATUS
+          if (( id == -1 )) ; then
+            GH_RUNNER_STATUS="does not exist"
+          else
+            GH_RUNNER_STATUS="exists"
+          fi
+
+          declare AZ_INSTANCE_STATUS
+          if [[ -z "$ip" ]]; then
+            AZ_INSTANCE_STATUS="does not exist"
+          else
+            AZ_INSTANCE_STATUS="exists"
+          fi
+
+          declare PRECONDITIONS_STATUS
+          if [[ "$id" == "-1" && -z "$ip" ]]; then
+            PRECONDITIONS_STATUS="met"
+          else
+            PRECONDITIONS_STATUS="not met"
+          fi
+
+          echo "Preconditions $PRECONDITIONS_STATUS: GitHub runner $GH_RUNNER_STATUS and Azure instance $AZ_INSTANCE_STATUS"
+          if [[ "$PRECONDITIONS_STATUS" != "met" ]]; then
+            exit 1
+          fi
+
+      - uses: actions/checkout@v4
+
+      - name: Set up SSH keys
+        run: |
+          mkdir -p "$HOME/.ssh"
+          echo "${{ secrets.AZURE_SSH_PRIVATE_KEY }}" > "$HOME/.ssh/id_rsa"
+          chmod 600 "$HOME/.ssh/id_rsa"
+          echo "${{ secrets.AZURE_SSH_PUBLIC_KEY }}" > "$HOME/.ssh/id_rsa.pub"
+          chmod 644 "$HOME/.ssh/id_rsa.pub"
+
+      - name: Log in to Azure
+        uses: Azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+
+      - name: Provision the instance
+        id: provision
+        uses: azure/CLI@v1
+        with:
+          azcliversion: latest
+          # TODO: This likely runs inside a docker image, which is why we need to provision keys twice.
+          #       However, it is odd that accessing GITHUB_WORKSPACE works.
+          inlineScript: |
+            declare -rA images=(
+              [Standard_HB120rs_v3]="Canonical:0001-com-ubuntu-minimal-mantic:minimal-23_10-gen2:latest"
+            )
+
+            if [[ -z "${images[${{ inputs.size }}]}" ]] ; then
+              echo "No image available for size: ${{ inputs.size }}"
+              exit 1
+            fi
+
+            mkdir -p "$HOME/.ssh"
+            echo "${{ secrets.AZURE_SSH_PRIVATE_KEY }}" > "$HOME/.ssh/id_rsa"
+            chmod 600 "$HOME/.ssh/id_rsa"
+            echo "${{ secrets.AZURE_SSH_PUBLIC_KEY }}" > "$HOME/.ssh/id_rsa.pub"
+            chmod 644 "$HOME/.ssh/id_rsa.pub"
+
+            az vm create \
+              --admin-username runner \
+              --enable-hibernation false \
+              --enable-hotpatching false \
+              --eviction-policy Delete \
+              --image "Canonical:0001-com-ubuntu-minimal-mantic:minimal-23_10-gen2:latest" \
+              --location eastus \
+              --max-price 1.0 \
+              --name "${{ inputs.size }}" \
+              --nic-delete-option Delete \
+              --priority Spot \
+              --resource-group NixCudaTest \
+              --security-type Standard \
+              --size "${{ inputs.size }}" \
+              --ssh-key-values "$HOME/.ssh/id_rsa.pub" \
+              --user-data "$GITHUB_WORKSPACE/ci/user-data-${{ inputs.size }}.sh" \
+            | jq -crS . \
+            | xargs -0 printf "json=%s" \
+            | tee -a "$GITHUB_OUTPUT"
+
+      - name: Get the instance IP
+        id: ip
+        run: |
+          declare -r ip=$(jq -crS '.publicIpAddress' <<< '${{ steps.provision.outputs.json }}')
+          if [[ -z "$ip" ]]; then
+            echo "Instance creation failed: no IP address"
+            exit 1
+          fi
+          echo "value=$ip" | tee -a "$GITHUB_OUTPUT"
+
+      - name: Add instance to SSH config
+        run: |
+          cat >> "$HOME/.ssh/config" <<EOF
+          Host ${{ inputs.size }}
+            HostName ${{ steps.ip.outputs.value }}
+            User runner
+            IdentityFile ~/.ssh/id_rsa
+            StrictHostKeyChecking no
+            UserKnownHostsFile /dev/null
+          EOF
+          chmod 644 "$HOME/.ssh/config"
+
+      - name: Ensure instance is reachable via ssh
+        run: timeout 60s bash -c "until ssh ${{ inputs.size }} true; do sleep 15; done"
+
+      - name: Generate registration token
+        env:
+          # We require admin read access to the repository to query the runners.
+          # TODO: Expires on Thu, Jun 13 2024.
+          GH_TOKEN: ${{ secrets.NIX_CUDA_TEST_GH_TOKEN_ADMIN_READ }}
+        run: |
+          gh api \
+            --method POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            /repos/ConnorBaker/nix-cuda-test/actions/runners/registration-token \
+          | jq -crS '.token' \
+          > "$GITHUB_WORKSPACE/.runner-token"
+
+      - name: Copy the token to the runner
+        run: scp "$GITHUB_WORKSPACE/.runner-token" "${{ inputs.size }}:~/.runner-token"
+    
+      - name: Set up self-hosted GitHub runner
+        # NOTE: Must execute ./config.sh from the actions-runner directory as it uses relative paths.
+        env:
+            # NOTE: Using an environment variable for this so we can template it
+            SERVICE_NAME: "actions.runner.ConnorBaker-nix-cuda-test.${{ inputs.size }}"
+        run: |
+          ssh "${{ inputs.size }}" bash -c \
+            'cd "$HOME/actions-runner" \
+            && ./config.sh \
+              --disableupdate \
+              --unattended \
+              --url "https://github.com/ConnorBaker/nix-cuda-test" \
+              --token "$(cat ~/.runner-token)" \
+              --labels "${{ inputs.size }}"\
+            && sudo ./svc.sh install \
+            && sudo systemctl daemon-reload \
+            && sudo systemctl enable ${{ env.SERVICE_NAME }} \
+            && sudo systemctl start ${{ env.SERVICE_NAME }}'
+          sleep 15

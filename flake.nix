@@ -26,9 +26,16 @@
   };
 
   nixConfig = {
-    extra-substituters = [ "https://cuda-maintainers.cachix.org" ];
-    extra-trusted-substituters = [ "https://cuda-maintainers.cachix.org" ];
+    extra-substituters = [
+      "https://cantcache.me/cuda"
+      "https://cuda-maintainers.cachix.org"
+    ];
+    extra-trusted-substituters = [
+      "https://cantcache.me/cuda"
+      "https://cuda-maintainers.cachix.org"
+    ];
     extra-trusted-public-keys = [
+      "cuda:NtbpAU7XGYlttrhCduqvpYKottCPdWVITWT+3nFVTBY="
       "cuda-maintainers.cachix.org-1:0dq3bujKpuEPMCX6U4WylrUDZ9JyUG0VpVZa7CNfq5E="
     ];
   };
