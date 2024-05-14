@@ -1,4 +1,4 @@
-{lib, ...}:
+{ lib, ... }:
 let
   inherit (lib) mkOption versions;
   inherit (lib.types)
@@ -11,7 +11,7 @@ let
 in
 {
   perSystem =
-    {pkgs, ...}:
+    { pkgs, ... }:
     {
       options.nix-cuda-test = {
         cuda = mkOption {
@@ -79,7 +79,7 @@ in
               };
             };
           };
-          default = {};
+          default = { };
         };
       };
     };

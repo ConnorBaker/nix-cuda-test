@@ -26,8 +26,8 @@
   };
 
   nixConfig = {
-    extra-substituters = ["https://cuda-maintainers.cachix.org"];
-    extra-trusted-substituters = ["https://cuda-maintainers.cachix.org"];
+    extra-substituters = [ "https://cuda-maintainers.cachix.org" ];
+    extra-trusted-substituters = [ "https://cuda-maintainers.cachix.org" ];
     extra-trusted-public-keys = [
       "cuda-maintainers.cachix.org-1:0dq3bujKpuEPMCX6U4WylrUDZ9JyUG0VpVZa7CNfq5E="
     ];
@@ -35,7 +35,7 @@
 
   outputs =
     inputs:
-    inputs.flake-parts.lib.mkFlake {inherit inputs;} {
+    inputs.flake-parts.lib.mkFlake { inherit inputs; } {
       systems = [
         "aarch64-linux"
         "x86_64-linux"
@@ -56,7 +56,7 @@
         {
           nix-cuda-test = {
             cuda = {
-              capabilities = ["8.9"];
+              capabilities = [ "8.9" ];
               # Use the default version of cudaPackages.
               # version = "12.2";
               forwardCompat = false;

@@ -6,7 +6,7 @@
 writeShellApplication {
   name = "xformers-info";
   runtimeInputs = [
-    (python3.withPackages (ps: with ps; [xformers]))
+    (python3.withPackages (ps: with ps; [ xformers ]))
     nixGL.nixGLNvidia
   ];
   text = ''

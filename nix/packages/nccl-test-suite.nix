@@ -17,7 +17,7 @@ writeShellApplication {
     "nccl-test-suite"
     + lib.optionalString wrapWithNixGL "-nixGL"
     + "-${cudaPackages.nccl-tests.version}";
-  runtimeInputs = [cudaPackages.nccl-tests] ++ lib.optionals wrapWithNixGL [nixGL.nixGLNvidia];
+  runtimeInputs = [ cudaPackages.nccl-tests ] ++ lib.optionals wrapWithNixGL [ nixGL.nixGLNvidia ];
   text = ''
     for exe in ${cudaPackages.nccl-tests}/bin/*; do
       if [[ -x "$exe" && -f "$exe" ]]; then

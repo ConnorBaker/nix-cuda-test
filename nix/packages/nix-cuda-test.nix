@@ -33,8 +33,8 @@ let
       "nix_cuda_test(:?/.*)?"
       "pyproject.toml"
     ];
-    nativeBuildInputs = [flit-core];
-    buildInputs = lib.optionals wrapWithNixGL [nixGL.nixGLNvidia];
+    nativeBuildInputs = [ flit-core ];
+    buildInputs = lib.optionals wrapWithNixGL [ nixGL.nixGLNvidia ];
     propagatedBuildInputs = [
       click
       openai-triton
@@ -72,7 +72,7 @@ let
       homepage = "";
       license = licenses.bsd3;
       platforms = platforms.linux;
-      maintainers = with maintainers; [connorbaker];
+      maintainers = with maintainers; [ connorbaker ];
       broken = !config.cudaSupport;
     };
   };

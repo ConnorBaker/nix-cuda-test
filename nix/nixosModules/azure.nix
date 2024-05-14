@@ -1,4 +1,4 @@
-{modulesPath, pkgs, ...}:
+{ modulesPath, pkgs, ... }:
 {
   imports = [
     "${modulesPath}/virtualisation/azure-common.nix"
@@ -9,8 +9,8 @@
   boot = {
     initrd = {
       compressor = "zstd";
-      compressorArgs = ["-19"];
-      kernelModules = ["nvme"];
+      compressorArgs = [ "-19" ];
+      kernelModules = [ "nvme" ];
     };
     kernelPackages = pkgs.linuxPackages_latest;
     tmp.cleanOnBoot = true;
@@ -79,9 +79,9 @@
     };
     overlays = [
       # Need newer version of Nix supporting max-substitution-jobs
-      (_: prev: {nix = prev.nixVersions.nix_2_16;})
+      (_: prev: { nix = prev.nixVersions.nix_2_16; })
       # Must be disabled to use mimalloc
-      (_: prev: {dhcpcd = prev.dhcpcd.override {enablePrivSep = false;};})
+      (_: prev: { dhcpcd = prev.dhcpcd.override { enablePrivSep = false; }; })
     ];
   };
 
@@ -110,7 +110,7 @@
       connorbaker = {
         autoSubUidGidRange = true;
         description = "Connor Baker's user account";
-        extraGroups = ["wheel"];
+        extraGroups = [ "wheel" ];
         isNormalUser = true;
         openssh.authorizedKeys.keys = [
           "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJXpenPZWADrxK4+6nFmPspmYPPniI3m+3PxAfjbslg+ connorbaker@Connors-MacBook-Pro.local"
@@ -119,7 +119,7 @@
       };
       runner = {
         description = "GitHub runner user account";
-        extraGroups = ["wheel"];
+        extraGroups = [ "wheel" ];
         isNormalUser = true;
         openssh.authorizedKeys.keys = [
           "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBgxYZuzBSHhETkrNcilkzsLBTGoHhXSa9ug6KwHkNDz github-runner"

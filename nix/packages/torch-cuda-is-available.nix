@@ -17,8 +17,8 @@ writeShellApplication {
     + lib.optionalString wrapWithNixGL "-nixGL"
     + "-${python3.pkgs.torch.version}";
   runtimeInputs = [
-    (python3.withPackages (ps: with ps; [torch]))
-  ] ++ lib.optionals wrapWithNixGL [nixGL.nixGLNvidia];
+    (python3.withPackages (ps: with ps; [ torch ]))
+  ] ++ lib.optionals wrapWithNixGL [ nixGL.nixGLNvidia ];
   text = ''
     ${optionalNixGLWrapper}python3 -c 'import torch; print(f"{torch.cuda.is_available()}")'
   '';

@@ -1,4 +1,4 @@
-{inputs, ...}:
+{ inputs, ... }:
 {
   imports = [
     ./options.nix
@@ -9,7 +9,7 @@
   ];
 
   perSystem =
-    {config, system, ...}:
+    { config, system, ... }:
     let
       cfg = config.nix-cuda-test;
     in
@@ -39,7 +39,7 @@
             _: prev:
             let
               # Names for python versions don't use underscores or dots
-              python3AttributeVersion = builtins.replaceStrings ["."] [""] cfg.python.version;
+              python3AttributeVersion = builtins.replaceStrings [ "." ] [ "" ] cfg.python.version;
               python3 = prev."python${python3AttributeVersion}".override {
                 enableOptimizations = cfg.python.optimize;
                 self = python3;
@@ -56,11 +56,9 @@
           (_: prev: {
             pythonPackagesExtensions = prev.pythonPackagesExtensions ++ [
               (pythonFinal: pythonPrev: {
-                torchmetrics = pythonPrev.torchmetrics.overridePythonAttrs (
-                  oldAttrs: {
-                    propagatedBuildInputs = oldAttrs.propagatedBuildInputs ++ [pythonFinal.lightning-utilities];
-                  }
-                );
+                torchmetrics = pythonPrev.torchmetrics.overridePythonAttrs (oldAttrs: {
+                  propagatedBuildInputs = oldAttrs.propagatedBuildInputs ++ [ pythonFinal.lightning-utilities ];
+                });
               })
             ];
           })
@@ -68,7 +66,7 @@
           (
             _: prev:
             let
-              cudaPackagesAttributeVersion = builtins.replaceStrings ["."] ["_"] cfg.cuda.version;
+              cudaPackagesAttributeVersion = builtins.replaceStrings [ "." ] [ "_" ] cfg.cuda.version;
             in
             {
               cudaPackages =

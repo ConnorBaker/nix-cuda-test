@@ -1,1 +1,1 @@
-{flake.nixosModules.azure = ./azure.nix;}
+{ flake.nixosModules.azure = ./azure.nix; }

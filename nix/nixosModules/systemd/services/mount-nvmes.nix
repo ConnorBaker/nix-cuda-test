@@ -1,4 +1,4 @@
-{pkgs, ...}:
+{ pkgs, ... }:
 let
   app = pkgs.writeShellApplication {
     name = "mount-nvme-drives";
@@ -77,6 +77,6 @@ in
       RemainAfterExit = "yes";
       Type = "oneshot";
     };
-    wantedBy = ["multi-user.target"];
+    wantedBy = [ "multi-user.target" ];
   };
 }
