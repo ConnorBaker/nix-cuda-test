@@ -1,0 +1,142 @@
+name: Create an Azure VM
+
+defaults:
+  run:
+    shell: bash
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: Action
+        required: true
+        type: choice
+        options:
+          - start
+          - terminate all
+      size:
+        description: Instance
+        required: true
+        type: choice
+        # All numbers are for spot instances in East US as of 2023-06-03.
+        # Standard_HB120rs_v3:
+        # - https://learn.microsoft.com/en-us/azure/virtual-machines/hbv3-series
+        # - 120 AMD EPYC™ 7V73X (Milan-X) CPU cores
+        # - 448 GB of RAM
+        # - 2 * 960 GB SSD
+        # - $0.37/hour
+        # Standard_NC8as_T4_v3:
+        # - https://learn.microsoft.com/en-us/azure/virtual-machines/nct4-v3-series
+        # - 1x NVIDIA Tesla T4 GPU with 16 GB of RAM
+        # - 8 AMD EPYC 7V12 (Rome) CPU cores
+        # - 56 GB of RAM
+        # - 1 * 360 GB SSD
+        # - $0.14/hour
+        # Standard_NV36ads_A10_v5:
+        # - https://learn.microsoft.com/en-us/azure/virtual-machines/nva10v5-series
+        # - 1x NVIDIA A10 GPU with 24 GB of RAM
+        # - 36 AMD EPYC 74F3V(Milan) CPU cores
+        # - 440 GB of RAM
+        # - 1 * 1440 GB SSD
+        # - $1.28/hour
+        options:
+          - Standard_HB120rs_v3
+          # - Standard_NC8as_T4_v3
+          # - Standard_NV36ads_A10_v5
+
+jobs:
+  # github-check-for-runner:
+  #   name: Check for runner (GitHub)
+  #   runs-on: ubuntu-latest
+  #   if: ${{ inputs.action == 'start' }}
+  #   outputs:
+  #     # NOTE: Returns the ID of the matching runner, or -1 if no matching runner is found.
+  #     id: ${{ steps.id.outputs.value }}
+  #   steps:
+  #     - name: Query GitHub for runners
+  #       id: runners
+  #       env:
+  #         # We require admin read access to the repository to query the runners.
+  #         # TODO: Expires on Thu, Jun 13 2024.
+  #         GH_TOKEN: ${{ secrets.NIX_CUDA_TEST_GH_TOKEN_ADMIN_READ }}
+  #       run: |
+  #         gh api \
+  #           -H "Accept: application/vnd.github+json" \
+  #           -H "X-GitHub-Api-Version: 2022-11-28" \
+  #           /repos/ConnorBaker/nix-cuda-test/actions/runners \
+  #         | jq -crS '.runners' \
+  #         | xargs --null printf "json=%s" \
+  #         | tee -a "$GITHUB_OUTPUT"
+
+  #     - name: Filter the runners by size and status
+  #       id: matching-runners
+  #       run: |
+  #         jq -crS \
+  #           --arg size "${{ inputs.size }}" \
+  #           'map(select(.name == $size and .status == "online"))' \
+  #           <<< "${{ steps.runners.outputs.json }}" \
+  #         | xargs --null printf "json=%s" \
+  #         | tee -a "$GITHUB_OUTPUT"
+
+  #     - name: Get the ID of the matching runners
+  #       id: id
+  #       run: |
+  #         declare -i length=$(jq -crS 'length' <<< "${{ steps.matching-runners.outputs.json }}")
+  #         declare -i id=-1
+  #         if (( length == 0 )); then
+  #           echo "No matching runner found."
+  #         elif (( length == 1 )); then
+  #           echo "Matching runner found."
+  #           id=$(jq -crS '.[0].id' <<< "${{ steps.matching-runners.outputs.json }}")
+  #         else
+  #           echo "Multiple matching runners found!"
+  #           exit 1
+  #         fi
+  #         echo "value=$id" | tee -a "$GITHUB_OUTPUT"
+
+  azure-check-for-instance:
+    name: Check for instance (Azure)
+    runs-on: ubuntu-latest
+    permissions: 
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Log in to Azure
+        uses: Azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+      - name: Azure CLI script
+        uses: azure/CLI@v1
+        with:
+          azcliversion: latest
+          inlineScript: |
+            export AZURE_RESOURCE_GROUP="NixCudaTest"
+            export AZURE_INSTANCE_SIZE="${{ inputs.size }}"
+            export AZURE_INSTANCE_NAME="${AZURE_INSTANCE_SIZE:?}"
+            chmod +x "$GITHUB_WORKSPACE/ci/azure-check-for-instance.sh"
+            "$GITHUB_WORKSPACE/ci/azure-check-for-instance.sh"
+
+  # create-running-instance:
+  #   name: Create instance
+  #   runs-on: ubuntu-latest
+  #   # needs: github-check-for-runner
+  #   # if: ${{ inputs.action == 'start' && needs.github-check-for-runner.outputs.id == -1 }}
+  #   permissions: 
+  #     contents: read
+  #     id-token: write
+  #   steps:
+  #     - name: Log in to Azure
+  #       uses: Azure/login@v2
+  #       with:
+  #         client-id: ${{ secrets.AZURE_CLIENT_ID }}
+  #         subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+  #         tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+  #     - name: Azure CLI script
+  #       uses: azure/CLI@v1
+  #       with:
+  #         azcliversion: latest
+  #         inlineScript: |
+  #           az account show

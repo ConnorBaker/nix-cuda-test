@@ -26,7 +26,6 @@
   };
 
   nixConfig = {
-    allow-import-from-derivation = true; # For nixfmt
     extra-substituters = ["https://cuda-maintainers.cachix.org"];
     extra-trusted-substituters = ["https://cuda-maintainers.cachix.org"];
     extra-trusted-public-keys = [
@@ -72,7 +71,10 @@
           pre-commit.settings = {
             hooks = {
               # Formatter checks
-              treefmt.enable = true;
+              treefmt = {
+                enable = true;
+                package = config.treefmt.build.wrapper;
+              };
 
               # Nix checks
               deadnix.enable = true;
@@ -98,9 +100,6 @@
                   '';
               in
               {
-                # Formatter
-                treefmt.package = config.treefmt.build.wrapper;
-
                 # Python
                 mypy.binPath = "${wrapper "mypy"}";
                 pyright.binPath = "${wrapper "pyright"}";
@@ -110,8 +109,20 @@
           treefmt = {
             projectRootFile = "flake.nix";
             programs = {
-              # Markdown
-              mdformat.enable = true;
+              # Markdown, YAML, JSON
+              prettier = {
+                enable = true;
+                includes = [
+                  "*.json"
+                  "*.md"
+                  "*.yaml"
+                ];
+                settings = {
+                  embeddedLanguageFormatting = "auto";
+                  printWidth = 120;
+                  tabWidth = 2;
+                };
+              };
 
               # Nix
               nixfmt = {

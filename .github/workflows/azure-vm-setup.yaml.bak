@@ -1,4 +1,4 @@
-name: Azure VM
+name: Setup an Azure VM as a GitHub Actions runner
 
 defaults:
   run:
