@@ -34,7 +34,7 @@ runs:
       run: |
         echo "## ${{ inputs.store-path }}" >> "$GITHUB_STEP_SUMMARY"
         echo "" >> "$GITHUB_STEP_SUMMARY"
-      
+
         cat >> "$GITHUB_STEP_SUMMARY" <<EOF
         |Store Path|NAR Size|Download Size|
         |-|-|-|

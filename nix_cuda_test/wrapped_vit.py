@@ -1,8 +1,7 @@
 from dataclasses import dataclass, field
 
 import pytorch_lightning as pl
-import torch.nn as nn
-from torch import Tensor
+from torch import Tensor, nn
 from torch.optim import Optimizer
 from torch.optim.adam import Adam
 

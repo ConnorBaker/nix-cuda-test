@@ -8,16 +8,16 @@ from nix_cuda_test.wrapped_vit import WrappedViT
 
 
 def main() -> None:
-    from lightning_fabric.fabric import Fabric  # type: ignore
+    from lightning_fabric.fabric import Fabric  # noqa: PLC0415
 
     Fabric.seed_everything(42, workers=True)
 
-    import torch.backends.cuda
+    import torch.backends.cuda  # noqa: PLC0415
 
     torch.backends.cuda.matmul.allow_tf32 = True
     torch.backends.cuda.matmul.allow_fp16_reduced_precision_reduction = True
 
-    import torch.backends.cudnn
+    import torch.backends.cudnn  # noqa: PLC0415
 
     torch.backends.cudnn.allow_tf32 = True
 
@@ -83,12 +83,10 @@ def main() -> None:
     parser.add_argument("--compile", action="store_true", help="compile the model")
     args = parser.parse_args()
 
-    transforms = Compose(
-        [
-            Resize(size=(args.img_size, args.img_size), antialias=True),  # type: ignore[assignment]
-            ToTensor(),
-        ]
-    )
+    transforms = Compose([
+        Resize(size=(args.img_size, args.img_size), antialias=True),  # type: ignore[assignment]
+        ToTensor(),
+    ])
     data_module = CIFARDataModule(
         batch_size=args.batch_size,
         data_dir="data",

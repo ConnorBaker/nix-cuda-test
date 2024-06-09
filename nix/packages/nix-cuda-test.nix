@@ -28,14 +28,14 @@ let
   attrs = {
     pname = "nix-cuda-test" + lib.optionalString wrapWithNixGL "-nixGL";
     version = "0.1.0";
-    format = "pyproject";
+    pyproject = true;
     src = lib.sources.sourceByRegex ../.. [
       "nix_cuda_test(:?/.*)?"
       "pyproject.toml"
     ];
-    nativeBuildInputs = [ flit-core ];
+    build-system = [ flit-core ];
     buildInputs = lib.optionals wrapWithNixGL [ nixGL.nixGLNvidia ];
-    propagatedBuildInputs = [
+    dependencies = [
       click
       openai-triton
       pydantic

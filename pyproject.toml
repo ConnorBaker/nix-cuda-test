@@ -14,40 +14,31 @@ dependencies = [
     "click>=8.1.3",
     "pydantic>=1.10.8",
     "torch>=2.0",
-    "torchvision>=0.15.0",
+    "torchvision",
     "triton>=2.0",
 ]
 
 [project.optional-dependencies]
-dev = ["black>=21.9b0", "mypy>=0.910", "ruff>=0.3.0"]
+dev = ["ruff>=0.3.0"]
 
 [project.scripts]
 nix-cuda-test = "nix_cuda_test.__main__:main"
 
-[tool.black]
-line-length = 120
-target-version = ['py310']
-
 [tool.ruff]
-select = [
-    # Pyflakes
-    "F",
-    # Pycodestyle
-    "E",
-    "W",
-    # isort
-    "I",
-]
 line-length = 120
 
-[tool.mypy]
-python_version = "3.10"
-platform = "linux"
-strict = true
-# We must ignore unused ignores because pyright might catch them.
-warn_unused_ignores = false
+[tool.ruff.format]
+preview = true
+
+[tool.ruff.lint]
+preview = true
+select = ["F", "E", "W", "I", "PL", "FURB", "LOG", "RUF", "G", "TID"]
+ignore = [
+  # Ignore functions with many arguments (I like currying)
+  "PLR0913",
+]
 
 [tool.pyright]
-pythonVersion = "3.10"
+pythonVersion = "3.12"
 pythonPlatform = "Linux"
 typeCheckingMode = "strict"

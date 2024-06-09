@@ -77,7 +77,6 @@ on:
         description: GitHub Runner SSH public key
         required: true
 
-
 jobs:
   launch-lambda-vm:
     name: Launch Lambda VM

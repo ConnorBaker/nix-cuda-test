@@ -27,7 +27,7 @@ on:
           - gpu_8x_v100
 
 jobs:
-  # TODO(@connorbaker): Label the instance with the ID name as well so only the workflow which 
+  # TODO(@connorbaker): Label the instance with the ID name as well so only the workflow which
   # created it is able to run tests on it?
   launch-vm:
     name: Launch Lambda VM
@@ -59,7 +59,7 @@ jobs:
 
   terminate-vm:
     name: Terminate Lambda VM
-    needs: 
+    needs:
       - launch-vm
       - lambda-vm-tests
     # NOTE: Unclear on failure mode -- what happens if launch-vm fails?

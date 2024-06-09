@@ -2,8 +2,7 @@ from dataclasses import dataclass, field
 
 import pytorch_lightning as pl
 import torch
-import torch.nn as nn
-from torch import Tensor
+from torch import Tensor, nn
 
 
 @dataclass(kw_only=True, eq=False)
@@ -58,7 +57,9 @@ class InputEmbedding(pl.LightningModule):
             out_features=self.latent_size,
         )
         # Class token
-        self.class_token = nn.Parameter(torch.randn(size=(self.batch_size, 1, self.latent_size)))
+        self.class_token = nn.Parameter(  # pyright: ignore[reportAttributeAccessIssue]
+            torch.randn(size=(self.batch_size, 1, self.latent_size))
+        )
         # Positional embedding
         self.pos_embedding = nn.Parameter(torch.randn(size=(self.batch_size, 1, self.latent_size)))
         # Patchify

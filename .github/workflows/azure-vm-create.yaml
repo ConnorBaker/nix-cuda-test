@@ -99,7 +99,7 @@ jobs:
   azure-check-for-instance:
     name: Check for instance (Azure)
     runs-on: ubuntu-latest
-    permissions: 
+    permissions:
       contents: read
       id-token: write
     outputs:
@@ -145,11 +145,11 @@ jobs:
   create-running-instance:
     name: Create instance
     runs-on: ubuntu-latest
-    needs: 
+    needs:
       - azure-check-for-instance
       - github-check-for-runner
     if: ${{ inputs.action == 'start' && needs.github-check-for-runner.outputs.id == -1 || needs.azure-check-for-instance.outputs.ip == 'null' }}
-    permissions: 
+    permissions:
       contents: read
       id-token: write
     steps:
@@ -285,12 +285,12 @@ jobs:
 
       - name: Copy the token to the runner
         run: scp "$GITHUB_WORKSPACE/.runner-token" "${{ inputs.size }}:~/.runner-token"
-    
+
       - name: Set up self-hosted GitHub runner
         # NOTE: Must execute ./config.sh from the actions-runner directory as it uses relative paths.
         env:
-            # NOTE: Using an environment variable for this so we can template it
-            SERVICE_NAME: "actions.runner.ConnorBaker-nix-cuda-test.${{ inputs.size }}"
+          # NOTE: Using an environment variable for this so we can template it
+          SERVICE_NAME: "actions.runner.ConnorBaker-nix-cuda-test.${{ inputs.size }}"
         run: |
           ssh "${{ inputs.size }}" bash -c \
             'cd "$HOME/actions-runner" \

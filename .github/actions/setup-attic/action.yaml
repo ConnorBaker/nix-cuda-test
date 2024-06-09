@@ -25,7 +25,7 @@ runs:
     - name: Create a user for Attic
       shell: bash
       run: sudo useradd --system --home-dir /var/lib/attic-watch-store attic-watch-store
-    
+
     # The service is templated when run, so it should be able to use attic from
     # the profile of the user running the `cat` command.
     - name: Set up a systemd service for Attic
@@ -50,4 +50,3 @@ runs:
         sudo systemctl daemon-reload
         sudo systemctl enable attic-watch-store
         sudo systemctl start attic-watch-store
-
