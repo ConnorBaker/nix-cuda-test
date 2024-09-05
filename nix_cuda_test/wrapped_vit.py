@@ -2,8 +2,8 @@ from dataclasses import dataclass, field
 
 import pytorch_lightning as pl
 from torch import Tensor, nn
-from torch.optim import Optimizer
 from torch.optim.adam import Adam
+from torch.optim.optimizer import Optimizer
 
 from nix_cuda_test.vit import ViT
 
