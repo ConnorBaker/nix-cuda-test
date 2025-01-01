@@ -1,33 +1,10 @@
 {
   inputs = {
-    flake-parts = {
-      inputs.nixpkgs-lib.follows = "nixpkgs";
-      url = "github:hercules-ci/flake-parts";
-    };
-    nixGL = {
-      inputs.nixpkgs.follows = "nixpkgs";
-      url = "github:guibou/nixGL";
-    };
-    nixpkgs.url = "github:nixos/nixpkgs";
-    git-hooks-nix = {
-      inputs = {
-        nixpkgs-stable.follows = "nixpkgs";
-        nixpkgs.follows = "nixpkgs";
-      };
-      url = "github:cachix/git-hooks.nix";
-    };
-    treefmt-nix = {
-      inputs.nixpkgs.follows = "nixpkgs";
-      url = "github:numtide/treefmt-nix";
-    };
-  };
-
-  nixConfig = {
-    extra-substituters = [ "https://cuda-maintainers.cachix.org" ];
-    extra-trusted-substituters = [ "https://cuda-maintainers.cachix.org" ];
-    extra-trusted-public-keys = [
-      "cuda-maintainers.cachix.org-1:0dq3bujKpuEPMCX6U4WylrUDZ9JyUG0VpVZa7CNfq5E="
-    ];
+    cuda-packages.url = "github:ConnorBaker/cuda-packages";
+    flake-parts.follows = "cuda-packages/flake-parts";
+    nixpkgs.follows = "cuda-packages/nixpkgs";
+    git-hooks-nix.follows = "cuda-packages/git-hooks-nix";
+    treefmt-nix.follows = "cuda-packages/treefmt-nix";
   };
 
   outputs =
@@ -37,28 +14,63 @@
         "aarch64-linux"
         "x86_64-linux"
       ];
+
       imports = [
         inputs.treefmt-nix.flakeModule
         inputs.git-hooks-nix.flakeModule
-        ./nix
       ];
+
+      flake.overlays.default = import ./overlay.nix;
+
       perSystem =
-        { config, pkgs, ... }:
         {
-          nix-cuda-test = {
-            cuda = {
-              capabilities = [ "8.9" ];
-              # Use the default version of cudaPackages.
-              # version = "12.2";
-              forwardCompat = false;
+          config,
+          pkgs,
+          system,
+          ...
+        }:
+        {
+          _module.args.pkgs = import inputs.nixpkgs {
+            inherit system;
+            # TODO: Due to the way Nixpkgs is built in stages, the config attribute set is not re-evaluated.
+            # This is problematic for us because we use it to signal the CUDA capabilities to the overlay.
+            # The only way I've found to combat this is to use pkgs.extend, which is not ideal.
+            # TODO: This also means that Nixpkgs needs to be imported *with* the correct config attribute set
+            # from the start, unless they're willing to re-import Nixpkgs with the correct config.
+            config = {
+              allowUnfree = true;
+              cudaSupport = true;
             };
-            nvidia.driver = {
-              hash = "sha256-grxVZ2rdQ0FsFG5wxiTI3GrxbMBMcjhoDFajDgBFsXs=";
-              version = "545.29.06";
-            };
-            # Just use whatever the default is for now.
-            # python.version = "3.11";
+            overlays = [
+              inputs.cuda-packages.overlays.default
+              inputs.self.overlays.default
+            ];
           };
+
+          legacyPackages = pkgs;
+
+          packages = {
+            inherit (pkgs.pkgsCuda.sm_89.cudaPackages.tests)
+              nccl-test-suite
+              nix-cuda-test
+              torch-cuda-is-available
+              xformers-info
+              ;
+          };
+
+          devShells =
+            let
+              inherit (pkgs.pkgsCuda.sm_89.cudaPackages.tests) nix-cuda-test;
+            in
+            {
+              # default = config.treefmt.build.devShell;
+              default = pkgs.pkgsCuda.sm_89.mkShell {
+                strictDeps = true;
+                inputsFrom = [ nix-cuda-test ];
+                packages = nix-cuda-test.optional-dependencies.dev;
+              };
+            };
+
           pre-commit.settings.hooks = {
             # Formatter checks
             treefmt = {
@@ -70,26 +82,6 @@
             deadnix.enable = true;
             nil.enable = true;
             statix.enable = true;
-
-            # Python checks
-            pyright = {
-              enable = true;
-              settings.binPath =
-                let
-                  # We need to provide wrapped version of mypy and pyright which can find our imports.
-                  # TODO: The script we're sourcing is an implementation detail of `mkShell` and we should
-                  # not depend on it exisitng. In fact, the first few lines of the file state as much
-                  # (that's why we need to strip them, sourcing only the content of the script).
-                  wrapper =
-                    name:
-                    pkgs.writeShellScript name ''
-                      source <(sed -n '/^declare/,$p' ${config.devShells.nix-cuda-test})
-                      ${name} "$@"
-                    '';
-                in
-                "${wrapper "pyright"}";
-            };
-            ruff.enable = true; # Ruff both lints and checks sorted imports
           };
 
           treefmt = {
@@ -111,10 +103,7 @@
               };
 
               # Nix
-              nixfmt = {
-                enable = true;
-                package = pkgs.nixfmt-rfc-style;
-              };
+              nixfmt.enable = true;
 
               # Python
               ruff.enable = true;

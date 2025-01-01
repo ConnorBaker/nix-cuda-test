@@ -3,8 +3,8 @@ from typing import Any
 
 import pytorch_lightning as pl
 from torch.utils.data import DataLoader
-from torchvision.datasets import CIFAR10  # type: ignore[import]
-from torchvision.transforms import Compose  # type: ignore[import]
+from torchvision.datasets import CIFAR10  # pyright: ignore[reportMissingTypeStubs]
+from torchvision.transforms import Compose  # pyright: ignore[reportMissingTypeStubs]
 
 
 @dataclass(kw_only=True)
@@ -19,12 +19,12 @@ class CIFARDataModule(pl.LightningDataModule):
     drop_last: bool
     num_workers: int
     pin_memory: bool
-    train_transforms: Compose
-    val_transforms: Compose
+    train_transforms: Compose  # pyright: ignore
+    val_transforms: Compose  # pyright: ignore
 
     # Non-args
-    train_dataset: CIFAR10 = field(init=False)
-    val_dataset: CIFAR10 = field(init=False)
+    train_dataset: CIFAR10 = field(init=False)  # pyright: ignore
+    val_dataset: CIFAR10 = field(init=False)  # pyright: ignore
 
     def __post_init__(self) -> None:
         super().__init__()

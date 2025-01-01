@@ -26,13 +26,13 @@ class WrappedViT(pl.LightningModule):
     """
 
     # Args
-    batch_size: int
     dropout: float
     latent_size: int
     n_channels: int
     num_classes: int
     num_encoders: int
     num_heads: int
+    num_patches: int
     patch_size: int
 
     # Optimizer args
@@ -41,25 +41,24 @@ class WrappedViT(pl.LightningModule):
 
     # Non-args
     criterion: nn.CrossEntropyLoss = field(init=False)
-    model: ViT = field(init=False)
+    module: ViT = field(init=False)
 
     def __post_init__(self) -> None:
         super().__init__()
         self.criterion = nn.CrossEntropyLoss()
-        self.model = ViT(
-            batch_size=self.batch_size,
+        self.module = ViT(
             dropout=self.dropout,
             latent_size=self.latent_size,
             n_channels=self.n_channels,
             num_classes=self.num_classes,
             num_encoders=self.num_encoders,
             num_heads=self.num_heads,
+            num_patches=self.num_patches,
             patch_size=self.patch_size,
         )
 
     def forward(self, test_input: Tensor) -> Tensor:  # type: ignore[override]
-        ret: Tensor = self.model(test_input)
-        return ret
+        return self.module(test_input)
 
     def training_step(self, batch: Tensor, batch_idx: int) -> Tensor:  # type: ignore[override]
         images, labels = batch
@@ -76,5 +75,5 @@ class WrappedViT(pl.LightningModule):
         return loss
 
     def configure_optimizers(self) -> Optimizer:
-        optimizer: Optimizer = Adam(self.model.parameters(), lr=self.lr, weight_decay=self.weight_decay)
+        optimizer: Optimizer = Adam(self.module.parameters(), lr=self.lr, weight_decay=self.weight_decay)
         return optimizer
