@@ -19,7 +19,7 @@ prev: {
   pythonPackagesExtensions = prev.pythonPackagesExtensions or [ ] ++ [
     (finalPythonPackages: prevPythonPackages: {
       # TODO: Upstream
-      flash-attention = finalPythonPackages.callPackage ./flash-attention.nix { };
+      flash-attn = finalPythonPackages.callPackage ./flash-attn.nix { };
       # TODO: Upstream
       transformer-engine = finalPythonPackages.callPackage ./transformer-engine.nix { };
       # TODO: Why overridePythonAttrs? Isn't that a footgun? Why does overrideAttrs not work?

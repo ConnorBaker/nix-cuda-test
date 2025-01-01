@@ -13,7 +13,7 @@ let
   inherit (lib.trivial) importTOML;
   inherit (python3.pkgs)
     buildPythonPackage
-    flash-attention
+    flash-attn
     flit-core
     openai-triton
     pydantic
@@ -49,8 +49,8 @@ let
     nativeBuildInputs = [ makeWrapper ];
 
     dependencies = [
-      flash-attention
-      openai-triton
+      flash-attn
+      openai-triton # TODO: PyTorch should propagate this
       pydantic
       pytorch-lightning
       stdenv.cc # When building with openai-triton, we need a CPP compiler
@@ -60,6 +60,7 @@ let
     ];
 
     pythonImportsCheck = [
+      "flash_attn"
       "nix_cuda_test"
       "pydantic"
       "pytorch_lightning"
