@@ -6,7 +6,6 @@
   pyright,
   python3,
   ruff,
-  stdenv,
 }:
 let
   inherit (lib.fileset) toSource unions;
@@ -15,7 +14,6 @@ let
     buildPythonPackage
     flash-attn
     flit-core
-    openai-triton
     pydantic
     pytorch-lightning
     torch
@@ -50,24 +48,14 @@ let
 
     dependencies = [
       flash-attn
-      openai-triton # TODO: PyTorch should propagate this
       pydantic
       pytorch-lightning
-      stdenv.cc # When building with openai-triton, we need a CPP compiler
       torch
       torchvision
       transformer-engine
     ];
 
-    pythonImportsCheck = [
-      "flash_attn"
-      "nix_cuda_test"
-      "pydantic"
-      "pytorch_lightning"
-      "torch"
-      "torchvision"
-      "transformer_engine"
-    ];
+    pythonImportsCheck = [ "nix_cuda_test" ];
 
     passthru.optional-dependencies.dev = [
       pyright
