@@ -1,6 +1,5 @@
 {
   config,
-  cudaStdenv,
   lib,
   makeWrapper,
   pyright,
@@ -19,6 +18,7 @@ let
     torch
     torchvision
     transformer-engine
+    triton
     ;
 
   pyprojectAttrs = importTOML ./pyproject.toml;
@@ -27,7 +27,6 @@ let
     # Must opt-out of __structuredAttrs which is on by default in our stdenv, but currently incompatible with Python
     # packaging: https://github.com/NixOS/nixpkgs/pull/347194.
     __structuredAttrs = false;
-    stdenv = cudaStdenv;
 
     pname = pyprojectAttrs.project.name;
     inherit (pyprojectAttrs.project) version;
@@ -53,6 +52,7 @@ let
       torch
       torchvision
       transformer-engine
+      triton
     ];
 
     pythonImportsCheck = [ "nix_cuda_test" ];

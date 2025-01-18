@@ -19,7 +19,6 @@ let
     cuda_nvrtc
     cuda_nvtx
     cuda_profiler_api
-    cudaStdenv
     cudnn
     flags
     libcublas
@@ -32,7 +31,6 @@ let
     # Must opt-out of __structuredAttrs which is on by default in our stdenv, but currently incompatible with Python
     # packaging: https://github.com/NixOS/nixpkgs/pull/347194.
     __structuredAttrs = false;
-    stdenv = cudaStdenv;
 
     pname = "transformer_engine";
     version = "1.13";

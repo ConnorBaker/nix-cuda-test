@@ -1,6 +1,6 @@
 final:
 let
-  inherit (final.lib.attrsets) getOutput recurseIntoAttrs;
+  inherit (final.lib.attrsets) recurseIntoAttrs recursiveUpdate;
 in
 prev: {
   cudaPackagesExtensions = prev.cudaPackagesExtensions or [ ] ++ [
@@ -16,53 +16,49 @@ prev: {
       };
     })
   ];
+  magma = prev.magma.override (prevAttrs: {
+    cudaPackages = recursiveUpdate prevAttrs.cudaPackages {
+      flags.dropDot = prevAttrs.cudaPackages.flags.dropDots;
+    };
+  });
   pythonPackagesExtensions = prev.pythonPackagesExtensions or [ ] ++ [
     (finalPythonPackages: prevPythonPackages: {
       # TODO: Upstream
       flash-attn = finalPythonPackages.callPackage ./flash-attn.nix { };
       # TODO: Upstream
       transformer-engine = finalPythonPackages.callPackage ./transformer-engine.nix { };
-      # TODO: Why overridePythonAttrs? Isn't that a footgun? Why does overrideAttrs not work?
-      torch = prevPythonPackages.torch.overrideAttrs (prevAttrs: {
-        buildInputs = prevAttrs.buildInputs or [ ] ++ [
-          (getOutput "static" final.cudaPackages.nccl.static)
-        ];
-      });
-      # TODO: Oh my god using overridePythonAttrs removes the `override` attribute?
-      # When using that instead of overrideAttrs, I get this error:
-      #        error: attribute 'override' missing
-      #  at /nix/store/f0m7vb7sihbqhynbiscj6ngcjgsm9kqw-source/pkgs/top-level/python-packages.nix:16402:17:
-      #   16401|
-      #   16402|   triton-cuda = self.triton.override {
-      #        |                 ^
-      #   16403|     cudaSupport = true;
-      # TODO: Upstream in progress: https://github.com/NixOS/nixpkgs/pull/369495
-      triton = prevPythonPackages.triton.overrideAttrs (prevAttrs: {
-        preConfigure =
-          prevAttrs.preConfigure or ""
-          # Patch the triton source to not use ldconfig.
-          # https://github.com/triton-lang/triton/blob/2939d86fc5c4bbb64fd04fd5346a6dbed3bc3c85/third_party/nvidia/backend/driver.py#L27
-          + ''
-            substituteInPlace "$NIX_BUILD_TOP/$sourceRoot/third_party/nvidia/backend/driver.py" \
-              --replace-fail \
-                'libs = subprocess.check_output(["/sbin/ldconfig", "-p"]).decode()' \
-                'libs = ""'
-          ''
-          # Patch the source code to make sure it doesn't specify a non-existent PTXAS version.
-          # CUDA 12.6 (the current default/max) tops out at PTXAS version 8.5.
-          # NOTE: This is fixed in `master`:
-          # https://github.com/triton-lang/triton/commit/f48dbc1b106c93144c198fbf3c4f30b2aab9d242
-          + ''
-            substituteInPlace "$NIX_BUILD_TOP/$sourceRoot/third_party/nvidia/backend/compiler.py" \
-              --replace-fail \
-                'return 80 + minor' \
-                'return 80 + (minor if minor <= 5 else 5)'
-          ''
-        # TODO: Had to use `export LD_LIBRARY_PATH=/run/opengl-driver/lib` to get it to detect libcuda.so.
-        # The only reason that works:
-        # https://github.com/triton-lang/triton/commit/0149bf70042efb998fc7a1ea30ed99e3a0f75053
-        ;
-      });
+      torch =
+        (prevPythonPackages.torch.override {
+          # PyTorch doesn't need Triton to build.
+          # Just include it in whichever package consumes pytorch.
+          tritonSupport = false;
+        }).overrideAttrs
+          (prevAttrs: {
+            buildInputs = prevAttrs.buildInputs or [ ] ++ [
+              final.cudaPackages.nccl.static
+            ];
+          });
+      triton = prevPythonPackages.triton.overrideAttrs (
+        let
+          inherit (final.stdenv) cc;
+        in
+        finalAttrs: prevAttrs: {
+          env = prevAttrs.env or { } // {
+            CC = "${cc}/bin/${cc.targetPrefix}cc";
+            CXX = "${cc}/bin/${cc.targetPrefix}c++";
+          };
+          preConfigure =
+            prevAttrs.preConfigure or ""
+            # Patch in our compiler.
+            # https://github.com/triton-lang/triton/blob/cf34004b8a67d290a962da166f5aa2fc66751326/python/triton/runtime/build.py#L25
+            + ''
+              substituteInPlace "$NIX_BUILD_TOP/$sourceRoot/python/triton/runtime/build.py" \
+                --replace-fail \
+                  'cc = os.environ.get("CC")' \
+                  'cc = "${finalAttrs.env.CC}"'
+            '';
+        }
+      );
     })
   ];
 }

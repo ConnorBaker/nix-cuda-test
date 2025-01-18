@@ -17,7 +17,6 @@ let
     cuda_cudart
     cuda_nvcc
     cutlass
-    cudaStdenv
     flags
     ;
   inherit (lib.attrsets) getOutput;
@@ -28,7 +27,6 @@ let
     # Must opt-out of __structuredAttrs which is on by default in our stdenv, but currently incompatible with Python
     # packaging: https://github.com/NixOS/nixpkgs/pull/347194.
     __structuredAttrs = false;
-    stdenv = cudaStdenv;
 
     pname = "flash_attn";
     version = "2.7.2";
