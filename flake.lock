@@ -8,11 +8,11 @@
         "treefmt-nix": "treefmt-nix"
       },
       "locked": {
-        "lastModified": 1744162631,
-        "narHash": "sha256-ApqgQP6mbTEnjKytMCDrrLqkFqJsaxKv76yip5AMf4g=",
+        "lastModified": 1744174669,
+        "narHash": "sha256-5HlcFhX1EFZBgva/V8di8DhB9XU/REDbspMCvAcculg=",
         "owner": "ConnorBaker",
         "repo": "cuda-packages",
-        "rev": "eecd5891177dcfdbb565839e7c76642096edb28b",
+        "rev": "8ed7964518eb534db427e354656e68080b582d92",
         "type": "github"
       },
       "original": {
