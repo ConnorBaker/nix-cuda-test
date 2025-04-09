@@ -16,6 +16,7 @@ let
   inherit (cudaPackages)
     cuda_cudart
     cuda_nvcc
+    cuda_nvml_dev
     cuda_nvrtc
     cuda_nvtx
     cuda_profiler_api
@@ -33,15 +34,15 @@ let
     __structuredAttrs = false;
 
     pname = "transformer_engine";
-    version = "1.13";
+    version = "2.1-unstable-2025-04-08";
 
     src = fetchFromGitHub {
       owner = "NVIDIA";
       repo = "TransformerEngine";
-      tag = "v${finalAttrs.version}";
+      rev = "9d4e11eaa508383e35b510dc338e58b09c30be73";
       fetchSubmodules = true;
       # TODO: Use our cudnn-frontend and googletest
-      hash = "sha256-m0u6FlkGxzNsrjFp0R+QgVGLFRkwo1tBz3mGZbq4Ryc=";
+      hash = "sha256-ELUM13VyZ3H9bFQgnM6+QvS8pJfuUkBsP1fAjxU3s5c=";
     };
 
     pyproject = true;
@@ -77,10 +78,10 @@ let
       ''
       # Allow newer versions of flash-attention to be used.
       + ''
-        substituteInPlace transformer_engine/pytorch/attention.py \
+        substituteInPlace transformer_engine/pytorch/dot_product_attention/utils.py \
           --replace-fail \
-            '_flash_attn_max_version = PkgVersion("2.6.3")' \
-            '_flash_attn_max_version = PkgVersion("2.99.99")'
+            'max_version = PkgVersion("2.7.4.post1")' \
+            'max_version = PkgVersion("2.99.99")'
       '';
 
     preConfigure = ''
@@ -116,6 +117,7 @@ let
 
     buildInputs = [
       cuda_cudart
+      cuda_nvml_dev
       cuda_nvrtc
       cuda_nvtx
       cuda_profiler_api
