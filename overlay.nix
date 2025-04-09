@@ -1,6 +1,7 @@
 final: prev:
 let
   inherit (prev.lib.attrsets) recurseIntoAttrs;
+  inherit (prev.lib.lists) optionals;
 in
 {
   cudaPackagesExtensions = prev.cudaPackagesExtensions or [ ] ++ [
@@ -26,20 +27,25 @@ in
         # Could not find CUPTI library, using CPU-only Kineto build
         # Could NOT find NCCL (missing: NCCL_INCLUDE_DIR)
         # USE_TENSORRT is unset in the printed config at the end of configurePhase
-        (prevPythonPackages.torch.override {
+        (prevPythonPackages.torch.override (prevAttrs: {
           # PyTorch doesn't need Triton to build.
           # Just include it in whichever package consumes pytorch.
           tritonSupport = false;
-        }).overrideAttrs
+          cudaPackages = prevAttrs.cudaPackages // {
+            autoAddCudaCompatRunpath = prevAttrs.cudaPackages.cuda_compat;
+          };
+        })).overrideAttrs
           (prevAttrs: {
-            buildInputs = prevAttrs.buildInputs or [ ] ++ [
-              final.cudaPackages.nccl.static
-              final.cudaPackages.libcusparse_lt
-              final.cudaPackages.libcudss
-              final.cudaPackages.libcufile
-            ];
+            buildInputs =
+              prevAttrs.buildInputs or [ ]
+              ++ [
+                final.cudaPackages.libcusparse_lt
+                final.cudaPackages.libcudss
+                final.cudaPackages.libcufile
+              ]
+              ++ optionals (final.cudaPackages.nccl.meta.available) [ final.cudaPackages.nccl.static ];
 
-            USE_CUFILE=1;
+            USE_CUFILE = 1;
           });
       triton = prevPythonPackages.triton.overrideAttrs (
         let
