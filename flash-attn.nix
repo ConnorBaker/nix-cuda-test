@@ -29,30 +29,25 @@ let
     __structuredAttrs = false;
 
     pname = "flash_attn";
-    version = "2.7.2";
+    version = "2.7.4-unstable-2025-04-08";
 
     src = fetchFromGitHub {
       owner = "Dao-AILab";
       repo = "flash-attention";
-      tag = "v2.7.2.post1";
-      hash = "sha256-jkBfOPXffQmi7pyBO6Qysx3kSOB9lYQI6e4IgGihJR8=";
+      rev = "2afa43cdab1e173f81408c37a7457aadf3bda895";
+      hash = "sha256-abgaYtmq+WzW88V2F+PGx0RK8SSs8Wp3qqM/P3L+9cM=";
     };
 
     pyproject = true;
 
-    postPatch =
-      # Bad
-      ''
-        substituteInPlace setup.py \
-          --replace-fail \
-            'subprocess.run(["git", "submodule", "update", "--init", "csrc/cutlass"])' \
-            'pass' \
-          --replace-fail \
-            '+ cc_flag' \
-            '+ ["${concatStringsSep ''","'' flags.gencode}"]'
-        mkdir -p csrc/cutlass
-        cp -r "${getOutput "include" cutlass}"/include csrc/cutlass/include
-      '';
+    postPatch = ''
+      mkdir -p csrc/cutlass
+      cp -r "${getOutput "include" cutlass}"/include csrc/cutlass/include
+      substituteInPlace setup.py \
+        --replace-fail \
+          '+ cc_flag' \
+          '+ ["${concatStringsSep ''","'' flags.gencode}"]'
+    '';
 
     # With 32 jobs, uses all 96 GB of RAM available on the machine; only succeeds with ZRAM enabled.
     # With default ZSTD compression, ZRAM reports less than 23 GB used to store ~170 GB of data.
