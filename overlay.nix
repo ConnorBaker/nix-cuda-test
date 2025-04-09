@@ -1,8 +1,8 @@
-final:
+final: prev:
 let
-  inherit (final.lib.attrsets) recurseIntoAttrs recursiveUpdate;
+  inherit (prev.lib.attrsets) recurseIntoAttrs;
 in
-prev: {
+{
   cudaPackagesExtensions = prev.cudaPackagesExtensions or [ ] ++ [
     (finalCudaPackages: prevCudaPackages: {
       # TODO(@connorbaker): Note sure package sets are set up in such a way that each CUDA package set is its own
@@ -16,11 +16,6 @@ prev: {
       };
     })
   ];
-  magma = prev.magma.override (prevAttrs: {
-    cudaPackages = recursiveUpdate prevAttrs.cudaPackages {
-      flags.dropDot = prevAttrs.cudaPackages.flags.dropDots;
-    };
-  });
   pythonPackagesExtensions = prev.pythonPackagesExtensions or [ ] ++ [
     (finalPythonPackages: prevPythonPackages: {
       # TODO: Upstream
@@ -28,6 +23,9 @@ prev: {
       # TODO: Upstream
       transformer-engine = finalPythonPackages.callPackage ./transformer-engine.nix { };
       torch =
+        # Could not find CUPTI library, using CPU-only Kineto build
+        # Could NOT find NCCL (missing: NCCL_INCLUDE_DIR)
+        # USE_TENSORRT is unset in the printed config at the end of configurePhase
         (prevPythonPackages.torch.override {
           # PyTorch doesn't need Triton to build.
           # Just include it in whichever package consumes pytorch.
@@ -36,7 +34,12 @@ prev: {
           (prevAttrs: {
             buildInputs = prevAttrs.buildInputs or [ ] ++ [
               final.cudaPackages.nccl.static
+              final.cudaPackages.libcusparse_lt
+              final.cudaPackages.libcudss
+              final.cudaPackages.libcufile
             ];
+
+            USE_CUFILE=1;
           });
       triton = prevPythonPackages.triton.overrideAttrs (
         let
