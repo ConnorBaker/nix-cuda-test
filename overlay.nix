@@ -6,9 +6,6 @@ in
 {
   cudaPackagesExtensions = prev.cudaPackagesExtensions or [ ] ++ [
     (finalCudaPackages: prevCudaPackages: {
-      # TODO(@connorbaker): Note sure package sets are set up in such a way that each CUDA package set is its own
-      # default. For example, will `pkgsCuda.sm_89.cudaPackages_12_2_2.pkgs.callPackage` provide `pkgsCuda.sm_89.cudaPackages_12_2_2`
-      # as `cudaPackages`?
       tests = recurseIntoAttrs (prevCudaPackages.tests or { }) // {
         nix-cuda-test = finalCudaPackages.callPackage ./packages/nix-cuda-test { };
         nccl-test-suite = finalCudaPackages.callPackage ./packages/nccl-test-suite.nix { };
@@ -26,14 +23,12 @@ in
       torch =
         # Could not find CUPTI library, using CPU-only Kineto build
         # Could NOT find NCCL (missing: NCCL_INCLUDE_DIR)
-        # USE_TENSORRT is unset in the printed config at the end of configurePhase
+        # USE_TENSORRT is unset in the printed config at the end of configurePhase.
+        # Not sure if that's used directly or passed through to one of the vendored projects.
         (prevPythonPackages.torch.override (prevAttrs: {
           # PyTorch doesn't need Triton to build.
           # Just include it in whichever package consumes pytorch.
           tritonSupport = false;
-          cudaPackages = prevAttrs.cudaPackages // {
-            autoAddCudaCompatRunpath = prevAttrs.cudaPackages.cuda_compat;
-          };
         })).overrideAttrs
           (prevAttrs: {
             buildInputs =
