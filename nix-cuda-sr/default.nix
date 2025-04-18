@@ -1,25 +1,27 @@
 {
+  buildPythonPackage,
   config,
+  einops,
+  flash-attn,
+  flit-core,
   lib,
   makeWrapper,
+  optuna,
+  pillow,
+  pydantic,
   pyright,
-  python3,
+  pytorch-lightning,
+  rawpy,
   ruff,
+  torch,
+  torchmetrics,
+  torchvision,
+  transformer-engine,
+  triton,
 }:
 let
   inherit (lib.fileset) toSource unions;
   inherit (lib.trivial) importTOML;
-  inherit (python3.pkgs)
-    buildPythonPackage
-    flash-attn
-    flit-core
-    pydantic
-    pytorch-lightning
-    torch
-    torchvision
-    transformer-engine
-    triton
-    ;
 
   pyprojectAttrs = importTOML ./pyproject.toml;
 
@@ -35,7 +37,7 @@ let
       root = ./.;
       fileset = unions [
         ./pyproject.toml
-        ./nix_cuda_test
+        ./nix_cuda_sr
       ];
     };
 
@@ -49,13 +51,18 @@ let
       flash-attn
       pydantic
       pytorch-lightning
+      einops
+      optuna
+      pillow
+      rawpy
       torch
+      torchmetrics
       torchvision
       transformer-engine
       triton
     ];
 
-    pythonImportsCheck = [ "nix_cuda_test" ];
+    pythonImportsCheck = [ "nix_cuda_sr" ];
 
     passthru.optional-dependencies.dev = [
       pyright

@@ -1,21 +1,7 @@
-final: prev:
-let
-  inherit (prev.lib.attrsets) recurseIntoAttrs;
-  inherit (prev.lib.lists) optionals;
-in
-{
-  cudaPackagesExtensions = prev.cudaPackagesExtensions or [ ] ++ [
-    (finalCudaPackages: prevCudaPackages: {
-      tests = recurseIntoAttrs (prevCudaPackages.tests or { }) // {
-        nix-cuda-test = finalCudaPackages.callPackage ./packages/nix-cuda-test { };
-        nccl-test-suite = finalCudaPackages.callPackage ./packages/nccl-test-suite.nix { };
-        torch-cuda-is-available = finalCudaPackages.callPackage ./packages/torch-cuda-is-available.nix { };
-        xformers-info = finalCudaPackages.callPackage ./packages/xformers-info.nix { };
-      };
-    })
-  ];
+final: prev: {
   pythonPackagesExtensions = prev.pythonPackagesExtensions or [ ] ++ [
     (finalPythonPackages: prevPythonPackages: {
+      nix-cuda-sr = finalPythonPackages.callPackage ./nix-cuda-sr { };
       # TODO: Upstream
       flash-attn = finalPythonPackages.callPackage ./flash-attn.nix { };
       # TODO: Upstream
@@ -38,7 +24,7 @@ in
                 final.cudaPackages.libcudss
                 final.cudaPackages.libcufile
               ]
-              ++ optionals (final.cudaPackages.nccl.meta.available) [ final.cudaPackages.nccl.static ];
+              ++ final.lib.optionals (final.cudaPackages.nccl.meta.available) [ final.cudaPackages.nccl.static ];
 
             USE_CUFILE = 1;
           });

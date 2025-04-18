@@ -3,7 +3,7 @@ requires = ["flit_core >=3.2,<4"]
 build-backend = "flit_core.buildapi"
 
 [project]
-name = "nix_cuda_test"
+name = "nix_cuda_sr"
 version = "0.1.0"
 authors = [{ name = "Connor Baker", email = "connorbaker01@gmail.com" }]
 description = "Test project for Nix CUDA support"
@@ -14,7 +14,12 @@ dependencies = [
     "flash-attn",
     "pydantic>=1.10.8",
     "pytorch-lightning",
+    "rawpy",
+    "einops",
+    "pillow",
+    "optuna",
     "torch>=2.0", # torch comes with PyTorch's triton build
+    "torchmetrics",
     "torchvision",
     "transformer-engine",
 ]
@@ -23,7 +28,7 @@ dependencies = [
 dev = ["ruff>=0.3.0"]
 
 [project.scripts]
-nix-cuda-test = "nix_cuda_test.__main__:main"
+nix-cuda-test = "nix_cuda_sr.__main__:main"
 
 [tool.ruff]
 line-length = 120
@@ -40,7 +45,7 @@ ignore = [
 ]
 
 [tool.pyright]
-include = ["./nix_cuda_test"]
+include = ["./nix_cuda_sr"]
 pythonVersion = "3.12"
 pythonPlatform = "Linux"
 typeCheckingMode = "strict"

@@ -40,34 +40,31 @@
             config = {
               allowUnfree = true;
               cudaSupport = true;
+              cudaCapabilities = [ "8.9" ];
             };
             overlays = [
               inputs.cuda-packages.overlays.default
               inputs.self.overlays.default
+              (final: _: { cudaPackages = final.cudaPackages_12_8; })
             ];
           };
 
           legacyPackages = pkgs;
 
           packages = {
-            inherit (pkgs.pkgsCuda.sm_89.cudaPackages.tests)
-              nccl-test-suite
-              nix-cuda-test
-              torch-cuda-is-available
-              xformers-info
-              ;
+            inherit (pkgs.python3Packages) nix-cuda-sr;
           };
 
           devShells =
             let
-              inherit (pkgs.pkgsCuda.sm_89.cudaPackages.tests) nix-cuda-test;
+              inherit (pkgs.python3Packages) nix-cuda-sr;
             in
             {
               # default = config.treefmt.build.devShell;
               default = pkgs.pkgsCuda.sm_89.mkShell {
                 strictDeps = true;
-                inputsFrom = [ nix-cuda-test ];
-                packages = nix-cuda-test.optional-dependencies.dev;
+                inputsFrom = [ nix-cuda-sr ];
+                packages = nix-cuda-sr.optional-dependencies.dev;
               };
             };
 

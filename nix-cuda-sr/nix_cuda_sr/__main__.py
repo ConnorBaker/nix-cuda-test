@@ -6,11 +6,19 @@ import torch.backends.cuda
 import torch.backends.cudnn
 from pytorch_lightning.plugins import TransformerEnginePrecision
 from pytorch_lightning.trainer.trainer import Trainer
-from torchvision.transforms import Compose, Resize, ToTensor  # type: ignore[import]
+from torch import nn
+from torchvision.transforms.v2 import (
+    Lambda,
+    RandomCrop,
+    Resize,
+    ToDtype,
+    ToImage,
+)
 from transformer_engine.common.recipe import DelayedScaling
 
-from nix_cuda_test.cifar_data_module import CIFARDataModule
-from nix_cuda_test.wrapped_te_vit import WrappedTEViT
+from nix_cuda_sr.bayer import bayer_mosaic_unpack
+from nix_cuda_sr.sr_data_module import SRDataModule
+from nix_cuda_sr.wrapped_te_vit import WrappedViT
 
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
@@ -67,7 +75,7 @@ def main() -> None:  # noqa: PLR0915
     torch._inductor.config.triton.multi_kernel = True
 
     torch._inductor.config.cuda.arch = "89"
-    torch._inductor.config.cuda.version = "12.6"
+    torch._inductor.config.cuda.version = "12.8"
     torch._inductor.config.cuda.compile_opt_level = "-O3"
     torch._inductor.config.cuda.enable_cuda_lto = True
     torch._inductor.config.cuda.use_fast_math = True
@@ -96,15 +104,8 @@ def main() -> None:  # noqa: PLR0915
     parser.add_argument(
         "--img-size",
         type=int,
-        default=224,
-        help="image size to be reshaped to (default : 224)",
-    )
-    parser.add_argument(
-        "--num-classes",
-        type=int,
-        # NOTE: CIFAR10 has 10 classes, but Transformer Engine requires we use a multiple of eight.
-        default=16,
-        help="number of classes in dataset (default : 16)",
+        default=128,
+        help="image size to be reshaped to (default : 256)",
     )
     parser.add_argument("--epochs", type=int, default=10, help="number of epochs (default : 10)")
     parser.add_argument("--lr", type=float, default=1e-4, help="base learning rate (default : 0.0001)")
@@ -114,22 +115,35 @@ def main() -> None:  # noqa: PLR0915
         default=3e-2,
         help="weight decay value (default : 0.03)",
     )
-    parser.add_argument("--batch-size", type=int, default=64, help="batch size (default : 64)")
+    # TODO: HAVE TO RUN WITH BATCH SIZE ONE BECAUSE THE NUMBER OF FRAMES VARIES???
+    parser.add_argument("--batch-size", type=int, default=1, help="batch size (default : 1)")
     parser.add_argument("--compile", action="store_true", help="compile the model")
     args = parser.parse_args()
 
-    transforms = Compose([
-        Resize(size=(args.img_size, args.img_size), antialias=True),  # type: ignore[assignment]
-        ToTensor(),
-    ])
-    data_module = CIFARDataModule(
+    # For the HR images
+    # target_transform = nn.Sequential(
+    #     # TODO: stupid
+    #     Lambda(lambda burst: bayer_mosaic_unpack(burst.unsqueeze(0)).squeeze(0)),
+    #     ToImage(),
+    #     # RandomPerspective(),
+    #     # MUST unpack mosaic prior to random crop
+    #     RandomCrop((args.img_size * 2, args.img_size * 2)),
+    #     # ScaleJitter((512, 512)),
+    #     ToDtype(torch.float16, scale=True),
+    #     # Don't move the tensor to the GPU until after it's been transformed to save on memory
+    #     Lambda(lambda burst: burst.to(device="cuda", memory_format=torch.channels_last)),
+    # )
+
+    # To generate the LR images
+    # transform = nn.Sequential(
+    #     Resize(size=(args.img_size, args.img_size), antialias=True),  # type: ignore[assignment]
+    # )
+
+    data_module = SRDataModule(
         batch_size=args.batch_size,
-        data_dir="data",
         drop_last=True,
-        num_workers=32,
+        num_workers=0,
         pin_memory=False,
-        train_transforms=transforms,
-        val_transforms=transforms,
     )
 
     precision = TransformerEnginePrecision(
@@ -150,6 +164,7 @@ def main() -> None:  # noqa: PLR0915
         devices="auto",
         max_epochs=args.epochs,
         plugins=[precision],
+        # fast_dev_run=True,
         # precision="bf16-mixed",
         strategy="auto",
         # profiler="simple",
@@ -157,22 +172,22 @@ def main() -> None:  # noqa: PLR0915
 
     # init the model directly on the device and with parameters in half-precision
     with trainer.init_module():
-        model = WrappedTEViT(
-            # model = WrappedViT(
-            dropout=args.dropout,
-            latent_size=args.latent_size,
-            lr=args.lr,
-            n_channels=args.n_channels,
-            num_classes=args.num_classes,
-            num_encoders=args.num_encoders,
-            num_heads=args.num_heads,
-            num_patches=(args.img_size // args.patch_size) ** 2,
-            patch_size=args.patch_size,
-            weight_decay=args.weight_decay,
-        )
+        model = WrappedViT(upscale_factor=2, n_channels=args.n_channels, lr=args.lr, weight_decay=args.weight_decay)
+        # model = model.to(memory_format=torch.channels_last_3d)
+    #     model = WrappedTEViT(
+    #         dropout=args.dropout,
+    #         latent_size=args.latent_size,
+    #         lr=args.lr,
+    #         n_channels=args.n_channels,
+    #         n_frames=5,  # all of the sets of frames have maximum of five
+    #         num_encoders=args.num_encoders,
+    #         num_heads=args.num_heads,
+    #         patch_size=args.patch_size,
+    #         weight_decay=args.weight_decay,
+    #     )
 
-        # NOTE: didn't see a performance improvement with `fuse_wgrad_accumulation` on the 4090.
-        # Did see a large decrease in training and validation accuracy.
+    # NOTE: didn't see a performance improvement with `fuse_wgrad_accumulation` on the 4090.
+    # Did see a large decrease in training and validation accuracy.
 
     if args.compile:
         model = torch.compile(model)  # type: ignore[assignment]
