@@ -54,12 +54,19 @@ class BurstPatchEmbedding(nn.Module):
         self.register_buffer("rel_position_index", rel_position_index.long())
         # ^ rel_position_index[p, q] gives index in bias table for relative position between patch p and q.
 
-        # 4. Linear layers for QKV projection and output projection in local attention.
-        self.qkv = te.Linear(embed_dim, 3 * embed_dim)  # using Transformer Engine Linear for potential FP8 support
+        # 4. Linear layers for QKV projection and output projection in local attention
+        #    (Transformer Engine fused attention will be used for the actual attention computation).
+        self.qkv = te.Linear(embed_dim, 3 * embed_dim)  # using Transformer Engine Linear for FP8 support
         self.proj = te.Linear(embed_dim, embed_dim)
         self.attn_heads = num_heads
         self.head_dim = embed_dim // num_heads
         self.scale = (self.head_dim) ** -0.5  # scale for dot-product attention
+        # Fused attention module (Transformer Engine DotProductAttention) for local window self-attention
+        self.attn = te.DotProductAttention(
+            num_attention_heads=num_heads, kv_channels=self.head_dim, attn_mask_type="no_mask", attention_dropout=0.0
+        )
+        # ^ Using TE's DotProductAttention to leverage fused kernels (FlashAttention/cuDNN) and FP8.
+        #   Relative positional bias will be applied via core_attention_bias in forward.
 
         # 5. Patch merging layer (stage 2): merge 2x2 neighboring patches, doubling channel dim (embed_dim2 = 2*embed_dim).
         self.embed_dim2 = embed_dim * 2
@@ -83,7 +90,7 @@ class BurstPatchEmbedding(nn.Module):
         )
 
         # Rearrange input to batch all frames for convolution: (B, 4, F, H2, W2) -> (B*F, 4, H2, W2)
-        x_frames = rearrange(x, "b c f h w -> (b f) c h w", b=B, f=F, h=H2, w=W2)
+        x_frames = rearrange(x, "b c f h w -> (b f) c h w")
 
         # 1. Patch embedding via conv:
         patch_feat = self.patch_embed(
@@ -92,7 +99,7 @@ class BurstPatchEmbedding(nn.Module):
         H_p, W_p = patch_feat.shape[2], patch_feat.shape[3]
         # Separate batch and frame, and move embed dim to last: (B*F, C, H_p, W_p) -> (B, F, H_p, W_p, C)
         C = self.embed_dim
-        patch_feat = rearrange(patch_feat, "(b f) c h w -> b f h w c", b=B, f=F, c=C, h=H_p, w=W_p)
+        patch_feat = rearrange(patch_feat, "(b f) c h w -> b f h w c", b=B, f=F)
         # Now patch_feat[b, f, i, j, :] is the C-dimensional embedding of patch (i, j) in frame f.
 
         # 2. Add frame positional embeddings:
@@ -115,53 +122,48 @@ class BurstPatchEmbedding(nn.Module):
         # total_windows = B * F * n_win_h * n_win_w
         # Shape windows as (total_windows, N, C) where N=M*M patches per window:
         windows = rearrange(
-            patch_feat,
-            "b f (nh m1) (nw m2) c -> (b f nh nw) (m1 m2) c",
-            b=B,
-            f=F,
-            nh=n_win_h,
-            nw=n_win_w,
-            m1=M,
-            m2=M,
-            c=C,
+            patch_feat, "b f (nh m1) (nw m2) c -> (b f nh nw) (m1 m2) c", b=B, f=F, nh=n_win_h, nw=n_win_w, m1=M, m2=M
         )
 
         # Linear projections for all windows at once (compute Q, K, V):
         qkv = self.qkv(windows)  # shape: (total_windows, N, 3*C)
         qkv = rearrange(qkv, "win seq (qkv c) -> qkv win seq c", qkv=3, c=C)
         q, k, v = qkv[0], qkv[1], qkv[2]  # each shape: (total_windows, N, C)
-        # Split heads for multi-head attention:
+
+        # Split heads for multi-head attention (then shape as batch-first for TE DotProductAttention):
         q = rearrange(
-            q, "w n (h d) -> w h n d", h=self.attn_heads, d=self.head_dim
-        )  # shape: (total_windows, num_heads, N, head_dim)
-        k = rearrange(k, "w n (h d) -> w h n d", h=self.attn_heads, d=self.head_dim)
-        v = rearrange(v, "w n (h d) -> w h n d", h=self.attn_heads, d=self.head_dim)
+            q, "w n (h d) -> w n h d", h=self.attn_heads, d=self.head_dim
+        )  # (total_windows, N, num_heads, head_dim)
+        k = rearrange(k, "w n (h d) -> w n h d", h=self.attn_heads, d=self.head_dim)
+        v = rearrange(v, "w n (h d) -> w n h d", h=self.attn_heads, d=self.head_dim)
 
-        # Scaled dot-product attention for each window:
-        attn_scores = torch.matmul(q, k.transpose(-2, -1)) * self.scale  # shape: (total_windows, num_heads, N, N)
-        # Add relative position bias:
-        bias_index = self.rel_position_index[:N, :N].reshape(-1)  # shape: (N*N,)
+        # Compute relative positional bias for this window (to be added to attention scores):
+        bias_index = rearrange(self.rel_position_index[:N, :N], "p q -> (p q)")
         rel_bias = self.rel_pos_bias_table[bias_index]  # shape: (N*N, num_heads)
-        rel_bias = rearrange(rel_bias, "(n1 n2) h -> h n1 n2", n1=N, n2=N, h=self.attn_heads)
-        attn_scores += rel_bias.unsqueeze(0)  # broadcast bias to all windows
+        rel_bias = rearrange(rel_bias, "(n1 n2) h -> 1 h n1 n2", n1=N, n2=N)
+        # ^ rel_bias is of shape (1, num_heads, N, N) and will broadcast across all windows.
 
-        # Softmax and weighted sum for attention:
-        attn_prob = attn_scores.softmax(dim=-1)  # shape: (total_windows, num_heads, N, N)
-        attn_out = torch.matmul(attn_prob, v)  # shape: (total_windows, num_heads, N, head_dim)
-        attn_out = rearrange(attn_out, "w h n d -> w n (h d)")  # shape: (total_windows, N, C)
+        # Fused scaled dot-product attention using Transformer Engine (with FP8 support):
+        attn_out = self.attn(
+            q,
+            k,
+            v,
+            qkv_format="bshd",  # query, key, value are provided as [batch, seq, head, dim] format
+            core_attention_bias_type="post_scale_bias",
+            core_attention_bias=rel_bias,
+        )
+        # ^ We use core_attention_bias to add the 2D relative positional bias to the attention logits
+        #   (post_scale_bias ensures bias is added after scaling by 1/sqrt(d)).
+        #   This leverages TE's fused attention kernel (FlashAttention/cuDNN).
+        #   If TE did not support passing a bias tensor, we would have to fallback to manual attention computation for
+        #   relative position encoding.
+
+        # already (w, N, C)
         attn_out = self.proj(attn_out)  # project back to C dimensions per patch
 
         # Reshape back from local windows to original patch grid:
         attn_out = rearrange(
-            attn_out,
-            "(b f nh nw) (m1 m2) c -> b f (nh m1) (nw m2) c",
-            b=B,
-            f=F,
-            nh=n_win_h,
-            nw=n_win_w,
-            m1=M,
-            m2=M,
-            c=C,
+            attn_out, "(b f nh nw) (m1 m2) c -> b f (nh m1) (nw m2) c", b=B, f=F, nh=n_win_h, nw=n_win_w, m1=M, m2=M
         )
         # Now attn_out has shape (B, F, H_p, W_p, C), the refined patch features after local window attention.
 
@@ -224,14 +226,17 @@ class MultiFrameRawSR(nn.Module):
 
         # 2. Transformer backbone (Transformer Engine for FP8):
         # Stack TransformerEngine's TransformerLayer for joint multi-frame feature extraction.
+        # Using fused QKV parameters and batch-first attention format for maximal performance on H100.
         self.transformer_layers = nn.ModuleList([
             te.TransformerLayer(
                 hidden_size=embed_dim,
                 ffn_hidden_size=ffn_dim,
                 num_attention_heads=num_heads,
-                self_attn_mask_type="no_mask",  # allow full self-attention
+                attn_input_format="bshd",  # use batch-first (B, seq, num_heads, head_dim) internal format
+                fuse_qkv_params=True,  # fuse QKV projections into one for efficiency
+                self_attn_mask_type="no_mask",  # allow full self-attention (no mask)
                 layernorm_epsilon=1e-5,
-                layer_number=n+1,
+                layer_number=n + 1,
             )
             for n in range(num_transformer_layers)
         ])
@@ -253,6 +258,7 @@ class MultiFrameRawSR(nn.Module):
         :return: Tensor of shape (B, 3, F, H_out, W_out) with super-resolved RGB images.
         """
         B, _, F, H2, W2 = burst.shape  # burst has 4 channels (R, G1, G2, B) per frame
+
         # 1. Patch embedding: get patch tokens for transformer (shape: B x N_patches x embed_dim).
         tokens = self.patch_embed(burst)
         H_p = H2 // self.patch_size // 2  # patches per frame along height after merging (H2/patch_size/2)
@@ -265,12 +271,14 @@ class MultiFrameRawSR(nn.Module):
 
         # 2. Transformer encoding (joint attention across all frame tokens) with FP8 precision:
         with te.fp8_autocast(enabled=True):
-            # Prepare input for TransformerEngine: (seq_length, batch, embed_dim)
-            encoded_seq = rearrange(tokens, "b n e -> n b e")
+            # Using batch-first format for TransformerLayer input (attn_input_format='bshd'), so no need to transpose tokens.
+            encoded = tokens  # shape: (B, N_patches, embed_dim)
             for layer in self.transformer_layers:
-                encoded_seq = layer(encoded_seq)  # each TransformerLayer applies multi-head attention + FFN
-            encoded = rearrange(encoded_seq, "n b e -> b n e")  # back to (B, N_patches, embed_dim)
+                encoded = layer(
+                    encoded
+                )  # each TransformerLayer applies multi-head attention + FFN (using fused FP8 ops)
 
+        # After encoding, `encoded` shape is (B, N_patches, embed_dim). Now reshape tokens back to spatial feature maps.
         # 3. Reshape encoded tokens back to frame-wise feature maps (low-res):
         # Separate frames and patch grid, and put embed_dim as channel:
         encoded = rearrange(encoded, "b (f hp wp) c -> b f c hp wp", f=F, hp=H_p, wp=W_p)
@@ -282,19 +290,19 @@ class MultiFrameRawSR(nn.Module):
         # 4. Meta-upsampling to high resolution and RGB reconstruction:
         out_frames = []
         for f_idx in range(F):
-            feat = feature_map[:, f_idx]  # (B, embed_dim, H2, W2) for frame f_idx
+            feat = feature_map[:, f_idx]  # (B, embed_dim, H2/2, W2/2) for frame f_idx
             # Upsample feature map by 'scale' using bilinear grid sampling (placeholder for meta-upscale):
             h_out = int(H2 * scale)
             w_out = int(W2 * scale)
-            grid_y = torch.linspace(0, H2 - 1, h_out, device=feat.device) / (H2 - 1) * 2 - 1
-            grid_x = torch.linspace(0, W2 - 1, w_out, device=feat.device) / (W2 - 1) * 2 - 1
+            grid_y = torch.linspace(0, H2 // 2 - 1, h_out, device=feat.device) / ((H2 // 2) - 1) * 2 - 1
+            grid_x = torch.linspace(0, W2 // 2 - 1, w_out, device=feat.device) / ((W2 // 2) - 1) * 2 - 1
             grid_y, grid_x = torch.meshgrid(grid_y, grid_x, indexing="ij")
             grid = torch.stack((grid_x, grid_y), dim=-1)  # shape: (h_out, w_out, 2)
-            grid = repeat(grid, "i j ij -> b i j ij", b=B)  # repeat grid for all batches
+            grid = repeat(grid, "i j xy -> b i j xy", b=B)  # repeat grid for all batches
             highres_feat = nn.functional.grid_sample(feat, grid, mode="bilinear", align_corners=True)
             # Convert high-res features to RGB image:
             rgb = self.toRGB(highres_feat)  # shape: (B, 3, h_out, w_out)
             out_frames.append(rgb)
-        # Stack outputs for all frames: (B, 3, F, H_out, W_out)
-        output = torch.stack(out_frames, dim=2)
+        # Stack outputs for all frames:
+        output = torch.stack(out_frames, dim=2)  # shape: (B, 3, F, H_out, W_out)
         return output
