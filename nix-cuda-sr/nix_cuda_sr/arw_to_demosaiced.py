@@ -3,6 +3,7 @@ from pathlib import Path
 
 import rawpy
 import torch
+import torchvision.transforms.v2 as T
 from torch import Tensor
 
 
@@ -35,7 +36,7 @@ def main() -> None:
     # Manifest maps burst directories to shape
     manifest = {}
     source_root: Path = Path("/home/connorbaker/Pictures/ARW")
-    dest_root: Path = Path("/home/connorbaker/Pictures/Tensor-ARW")
+    dest_root: Path = Path("/home/connorbaker/Pictures/Tensor-1024-ARW")
 
     excluded_paths = {
         # Contains images which are rotated, so the tensors are not the same size
@@ -71,6 +72,12 @@ def main() -> None:
                 continue
 
             mosaiced, demosaiced = read_arw_burst(burst_dir)
+            mosaiced = T.functional.center_crop(
+                T.functional.resize_image(mosaiced, size=[1200, 1600], antialias=True), [1024, 1024]
+            )
+            demosaiced = T.functional.center_crop(
+                T.functional.resize_image(demosaiced, size=[1200, 1600], antialias=True), [1024, 1024]
+            )
 
             # Update the manifest with the burst directory and its shape
             manifest[burst_dir.relative_to(source_root).as_posix()] = mosaiced.shape

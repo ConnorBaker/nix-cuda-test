@@ -6,9 +6,9 @@ import torch
 import torchmetrics
 import torchmetrics.image
 import torchvision.transforms.v2 as T
+import transformer_engine.pytorch as te
 from einops import rearrange
 from torch import Tensor
-from torch.optim.adam import Adam
 from torch.optim.optimizer import Optimizer
 
 from nix_cuda_sr.bayer import bayer_mosaic_unpack
@@ -27,6 +27,13 @@ from nix_cuda_sr.multi_frame_raw_sr import MultiFrameRawSR
 # https://lightning.ai/docs/torchmetrics/stable/image/structural_similarity.html
 # https://lightning.ai/docs/torchmetrics/stable/image/universal_image_quality_index.html
 # https://lightning.ai/docs/torchmetrics/stable/image/visual_information_fidelity.html
+
+
+def prep_hr_img(t: Tensor) -> Tensor:
+    t = T.functional.resize_image(t, size=[300, 400], antialias=True)
+    t = T.functional.center_crop_image(t, [256, 256])
+    t = T.functional.to_dtype_image(t, dtype=torch.float32, scale=True)
+    return t
 
 
 @dataclass(kw_only=True, eq=False)
@@ -68,36 +75,14 @@ class WrappedViT(pl.LightningModule):
 
     def training_step(self, imgs: tuple[Tensor, Tensor], batch_idx: int) -> Tensor:  # type: ignore[override]
         mosaicked_hr_imgs, demosaicked_hr_imgs = imgs
-
-        # Crop the images to 256x256
-        mosaicked_hr_imgs = T.functional.to_dtype_image(
-            T.functional.center_crop(bayer_mosaic_unpack(mosaicked_hr_imgs), [256, 256]),
-            dtype=torch.float32,
-            scale=True,
-        )
-        assert mosaicked_hr_imgs.shape == (
-            expected := (mosaicked_hr_imgs.shape[0], 4, mosaicked_hr_imgs.shape[2], 256, 256)
-        ), f"Output shape mismatch: {expected} vs. {mosaicked_hr_imgs.shape}"
-        demosaicked_hr_imgs = T.functional.to_dtype_image(
-            T.functional.center_crop(demosaicked_hr_imgs, [256, 256]),
-            dtype=torch.float32,
-            scale=True,
-        )
-        assert demosaicked_hr_imgs.shape == (
-            expected := (mosaicked_hr_imgs.shape[0], 3, mosaicked_hr_imgs.shape[2], 256, 256)
-        ), f"Output shape mismatch: {expected} vs. {demosaicked_hr_imgs.shape}"
+        mosaicked_hr_imgs = prep_hr_img(bayer_mosaic_unpack(mosaicked_hr_imgs))
+        demosaicked_hr_imgs = prep_hr_img(demosaicked_hr_imgs)
 
         # Create the LR images
         mosaicked_lr_imgs = T.functional.resize_image(mosaicked_hr_imgs, size=[128, 128], antialias=True)
-        assert mosaicked_lr_imgs.shape == (
-            expected := (mosaicked_hr_imgs.shape[0], 4, mosaicked_hr_imgs.shape[2], 128, 128)
-        ), f"Output shape mismatch: {expected} vs. {mosaicked_lr_imgs.shape}"
 
         # Superresolve
         resolved_hr_imgs: Tensor = self(mosaicked_lr_imgs)
-        assert resolved_hr_imgs.shape == demosaicked_hr_imgs.shape, (
-            f"Output shape mismatch: {demosaicked_hr_imgs.shape} vs. {resolved_hr_imgs.shape}"
-        )
 
         # NOTE: the metrics don't know how to handle multiple frames -- they just consider them to be batched.
         resolved_hr_imgs = rearrange(resolved_hr_imgs, "b c f h w -> (b f) c h w")
@@ -108,36 +93,14 @@ class WrappedViT(pl.LightningModule):
 
     def validation_step(self, imgs: tuple[Tensor, Tensor], batch_idx: int) -> Tensor:  # type: ignore[override]
         mosaicked_hr_imgs, demosaicked_hr_imgs = imgs
-
-        # Crop the images to 256x256
-        mosaicked_hr_imgs = T.functional.to_dtype_image(
-            T.functional.center_crop(bayer_mosaic_unpack(mosaicked_hr_imgs), [256, 256]),
-            dtype=torch.float32,
-            scale=True,
-        )
-        assert mosaicked_hr_imgs.shape == (
-            expected := (mosaicked_hr_imgs.shape[0], 4, mosaicked_hr_imgs.shape[2], 256, 256)
-        ), f"Output shape mismatch: {expected} vs. {mosaicked_hr_imgs.shape}"
-        demosaicked_hr_imgs = T.functional.to_dtype_image(
-            T.functional.center_crop(demosaicked_hr_imgs, [256, 256]),
-            dtype=torch.float32,
-            scale=True,
-        )
-        assert demosaicked_hr_imgs.shape == (
-            expected := (mosaicked_hr_imgs.shape[0], 3, mosaicked_hr_imgs.shape[2], 256, 256)
-        ), f"Output shape mismatch: {expected} vs. {demosaicked_hr_imgs.shape}"
+        mosaicked_hr_imgs = prep_hr_img(bayer_mosaic_unpack(mosaicked_hr_imgs))
+        demosaicked_hr_imgs = prep_hr_img(demosaicked_hr_imgs)
 
         # Create the LR images
         mosaicked_lr_imgs = T.functional.resize_image(mosaicked_hr_imgs, size=[128, 128], antialias=True)
-        assert mosaicked_lr_imgs.shape == (
-            expected := (mosaicked_hr_imgs.shape[0], 4, mosaicked_hr_imgs.shape[2], 128, 128)
-        ), f"Output shape mismatch: {expected} vs. {mosaicked_lr_imgs.shape}"
 
         # Superresolve
         resolved_hr_imgs: Tensor = self(mosaicked_lr_imgs)
-        assert resolved_hr_imgs.shape == demosaicked_hr_imgs.shape, (
-            f"Output shape mismatch: {demosaicked_hr_imgs.shape} vs. {resolved_hr_imgs.shape}"
-        )
 
         # NOTE: the metrics don't know how to handle multiple frames -- they just consider them to be batched.
         resolved_hr_imgs = rearrange(resolved_hr_imgs, "b c f h w -> (b f) c h w")
@@ -154,5 +117,5 @@ class WrappedViT(pl.LightningModule):
     #     self.val_metrics.reset()
 
     def configure_optimizers(self) -> Optimizer:
-        optimizer: Optimizer = Adam(self.model.parameters(), lr=self.lr, weight_decay=self.weight_decay)
+        optimizer: Optimizer = te.optimizers.FusedAdam(self.model.parameters(), lr=self.lr, weight_decay=self.weight_decay)
         return optimizer
