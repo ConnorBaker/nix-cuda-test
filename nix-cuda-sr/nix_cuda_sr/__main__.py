@@ -1,26 +1,20 @@
 import argparse
 import warnings
+from pathlib import Path
 
 import torch._inductor.config
 import torch.backends.cuda
 import torch.backends.cudnn
 from pytorch_lightning.plugins import TransformerEnginePrecision
 from pytorch_lightning.trainer.trainer import Trainer
-from torch import nn
-from torchvision.transforms.v2 import (
-    Lambda,
-    RandomCrop,
-    Resize,
-    ToDtype,
-    ToImage,
-)
 from transformer_engine.common.recipe import DelayedScaling
 
-from nix_cuda_sr.bayer import bayer_mosaic_unpack
 from nix_cuda_sr.sr_data_module import SRDataModule
 from nix_cuda_sr.wrapped_te_vit import WrappedViT
 
 warnings.filterwarnings("ignore", category=DeprecationWarning)
+warnings.filterwarnings("ignore", category=UserWarning)
+warnings.filterwarnings("ignore", category=FutureWarning)
 
 
 def main() -> None:  # noqa: PLR0915
@@ -120,32 +114,6 @@ def main() -> None:  # noqa: PLR0915
     parser.add_argument("--compile", action="store_true", help="compile the model")
     args = parser.parse_args()
 
-    # For the HR images
-    # target_transform = nn.Sequential(
-    #     # TODO: stupid
-    #     Lambda(lambda burst: bayer_mosaic_unpack(burst.unsqueeze(0)).squeeze(0)),
-    #     ToImage(),
-    #     # RandomPerspective(),
-    #     # MUST unpack mosaic prior to random crop
-    #     RandomCrop((args.img_size * 2, args.img_size * 2)),
-    #     # ScaleJitter((512, 512)),
-    #     ToDtype(torch.float16, scale=True),
-    #     # Don't move the tensor to the GPU until after it's been transformed to save on memory
-    #     Lambda(lambda burst: burst.to(device="cuda", memory_format=torch.channels_last)),
-    # )
-
-    # To generate the LR images
-    # transform = nn.Sequential(
-    #     Resize(size=(args.img_size, args.img_size), antialias=True),  # type: ignore[assignment]
-    # )
-
-    data_module = SRDataModule(
-        batch_size=args.batch_size,
-        drop_last=True,
-        num_workers=0,
-        pin_memory=False,
-    )
-
     precision = TransformerEnginePrecision(
         weights_dtype=torch.bfloat16,
         # NOTE: Both of these require Hopper or newer.
@@ -174,17 +142,6 @@ def main() -> None:  # noqa: PLR0915
     with trainer.init_module():
         model = WrappedViT(upscale_factor=2, n_channels=args.n_channels, lr=args.lr, weight_decay=args.weight_decay)
         # model = model.to(memory_format=torch.channels_last_3d)
-    #     model = WrappedTEViT(
-    #         dropout=args.dropout,
-    #         latent_size=args.latent_size,
-    #         lr=args.lr,
-    #         n_channels=args.n_channels,
-    #         n_frames=5,  # all of the sets of frames have maximum of five
-    #         num_encoders=args.num_encoders,
-    #         num_heads=args.num_heads,
-    #         patch_size=args.patch_size,
-    #         weight_decay=args.weight_decay,
-    #     )
 
     # NOTE: didn't see a performance improvement with `fuse_wgrad_accumulation` on the 4090.
     # Did see a large decrease in training and validation accuracy.
@@ -193,7 +150,10 @@ def main() -> None:  # noqa: PLR0915
         model = torch.compile(model)  # type: ignore[assignment]
 
     trainer.fit(
-        datamodule=data_module,
+        datamodule=SRDataModule(
+            root=Path("/home/connorbaker/Pictures/Tensor-256-ARW"),
+            batch_size=args.batch_size,
+        ),
         model=model,  # type: ignore[arg-type]
     )
 

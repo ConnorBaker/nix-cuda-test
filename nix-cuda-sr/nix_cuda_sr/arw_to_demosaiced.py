@@ -6,18 +6,22 @@ import torch
 import torchvision.transforms.v2 as T
 from torch import Tensor
 
+from nix_cuda_sr.bayer import bayer_mosaic_unpack
+
 
 def read_arw(p: Path) -> tuple[Tensor, Tensor]:
     """
-    Read a raw image file and return tensors with shapes (H, W) and (C, H, W).
+    Read a raw image file and return tensors with shapes (4, H//2, W//2) and (3, H, W).
     """
     with rawpy.imread(p.as_posix()) as raw:
-        return torch.asarray(raw.raw_colors), torch.asarray(raw.postprocess(half_size=False)).permute(2, 0, 1)
+        return bayer_mosaic_unpack(torch.asarray(raw.raw_colors)), torch.asarray(
+            raw.postprocess(half_size=False)
+        ).permute(2, 0, 1)
 
 
 def read_arw_burst(burst_dir: Path) -> tuple[Tensor, Tensor]:
     """
-    Read a burst of raw image files and return tensors with shapes (F, H, W) and (C, F, H, W).
+    Read a burst of raw image files and return tensors with shapes (4, F, H//2, W//2) and (3, F, H, W).
     """
     mosaiced_stack = []
     demosaiced_stack = []
@@ -27,9 +31,21 @@ def read_arw_burst(burst_dir: Path) -> tuple[Tensor, Tensor]:
         demosaiced_stack.append(demosaiced)
 
     # Stack the mosaiced and demosaiced images
-    mosaiced = torch.stack(mosaiced_stack)  # shape: (F, H, W)
-    demosaiced = torch.stack(demosaiced_stack, dim=1)  # shape: (C, F, H, W)
+    mosaiced = torch.stack(mosaiced_stack, dim=1)
+    demosaiced = torch.stack(demosaiced_stack, dim=1)
     return mosaiced, demosaiced
+
+
+def pre_process_image(image: Tensor) -> Tensor:
+    """
+    Pre-process the image tensor by resizing and cropping.
+    """
+    # Resize to 1200x1600 and crop to 1024x1024
+    # Resize to 600x800 and crop to 512x512
+    # Resize to 300x400 and crop to 256x256
+    image = T.functional.resize_image(image, size=[1200, 1600], antialias=True)
+    image = T.functional.center_crop_image(image, [1024, 1024])
+    return image
 
 
 def main() -> None:
@@ -72,12 +88,8 @@ def main() -> None:
                 continue
 
             mosaiced, demosaiced = read_arw_burst(burst_dir)
-            mosaiced = T.functional.center_crop(
-                T.functional.resize_image(mosaiced, size=[1200, 1600], antialias=True), [1024, 1024]
-            )
-            demosaiced = T.functional.center_crop(
-                T.functional.resize_image(demosaiced, size=[1200, 1600], antialias=True), [1024, 1024]
-            )
+            mosaiced = pre_process_image(mosaiced)
+            demosaiced = pre_process_image(demosaiced)
 
             # Update the manifest with the burst directory and its shape
             manifest[burst_dir.relative_to(source_root).as_posix()] = mosaiced.shape
@@ -91,7 +103,7 @@ def main() -> None:
             torch.save(demosaiced, output_path)
 
     # Save the manifest to a file
-    manifest_path = dest_root / "manifest.txt"
+    manifest_path = dest_root / "manifest.json"
     manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True))
 
 

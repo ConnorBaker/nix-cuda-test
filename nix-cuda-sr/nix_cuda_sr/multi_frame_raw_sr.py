@@ -56,6 +56,7 @@ class BurstPatchEmbedding(nn.Module):
 
         # 4. Linear layers for QKV projection and output projection in local attention
         #    (Transformer Engine fused attention will be used for the actual attention computation).
+        # TODO(@connorbaker): Check out setting params_dtype to FP8 for TE Linear layers.
         self.qkv = te.Linear(embed_dim, 3 * embed_dim)  # using Transformer Engine Linear for FP8 support
         self.proj = te.Linear(embed_dim, embed_dim)
         self.attn_heads = num_heads
@@ -63,7 +64,11 @@ class BurstPatchEmbedding(nn.Module):
         self.scale = (self.head_dim) ** -0.5  # scale for dot-product attention
         # Fused attention module (Transformer Engine DotProductAttention) for local window self-attention
         self.attn = te.DotProductAttention(
-            num_attention_heads=num_heads, kv_channels=self.head_dim, attn_mask_type="no_mask", attention_dropout=0.0
+            num_attention_heads=num_heads,
+            kv_channels=self.head_dim,
+            attention_dropout=0.0,
+            qkv_format="bshd",  # query, key, value are provided as [batch, seq, head, dim] format
+            attn_mask_type="no_mask",
         )
         # ^ Using TE's DotProductAttention to leverage fused kernels (FlashAttention/cuDNN) and FP8.
         #   Relative positional bias will be applied via core_attention_bias in forward.
@@ -125,6 +130,8 @@ class BurstPatchEmbedding(nn.Module):
             patch_feat, "b f (nh m1) (nw m2) c -> (b f nh nw) (m1 m2) c", b=B, f=F, nh=n_win_h, nw=n_win_w, m1=M, m2=M
         )
 
+        # TODO(@connorbaker): the dimensions here are wrong. the batch dimension is the number of windows, not the batch.
+
         # Linear projections for all windows at once (compute Q, K, V):
         qkv = self.qkv(windows)  # shape: (total_windows, N, 3*C)
         qkv = rearrange(qkv, "win seq (qkv c) -> qkv win seq c", qkv=3, c=C)
@@ -148,7 +155,6 @@ class BurstPatchEmbedding(nn.Module):
             q,
             k,
             v,
-            qkv_format="bshd",  # query, key, value are provided as [batch, seq, head, dim] format
             core_attention_bias_type="post_scale_bias",
             core_attention_bias=rel_bias,
         )
@@ -227,7 +233,7 @@ class MultiFrameRawSR(nn.Module):
         # 2. Transformer backbone (Transformer Engine for FP8):
         # Stack TransformerEngine's TransformerLayer for joint multi-frame feature extraction.
         # Using fused QKV parameters and batch-first attention format for maximal performance on H100.
-        self.transformer_layers = nn.ModuleList([
+        self.transformer_layers = te.ops.Sequential(*[
             te.TransformerLayer(
                 hidden_size=embed_dim,
                 ffn_hidden_size=ffn_dim,
@@ -269,14 +275,9 @@ class MultiFrameRawSR(nn.Module):
             f"tokens shape mismatch: {(B, N_patches, self.embed_dim)} vs. {tokens.shape}"
         )
 
-        # 2. Transformer encoding (joint attention across all frame tokens) with FP8 precision:
-        with te.fp8_autocast(enabled=True):
-            # Using batch-first format for TransformerLayer input (attn_input_format='bshd'), so no need to transpose tokens.
-            encoded = tokens  # shape: (B, N_patches, embed_dim)
-            for layer in self.transformer_layers:
-                encoded = layer(
-                    encoded
-                )  # each TransformerLayer applies multi-head attention + FFN (using fused FP8 ops)
+        # 2. Transformer encoding (joint attention across all frame tokens)
+        # Using batch-first format for TransformerLayer input (attn_input_format='bshd'), so no need to transpose tokens.
+        encoded = self.transformer_layers(tokens)  # shape: (B, N_patches, embed_dim)
 
         # After encoding, `encoded` shape is (B, N_patches, embed_dim). Now reshape tokens back to spatial feature maps.
         # 3. Reshape encoded tokens back to frame-wise feature maps (low-res):
@@ -288,17 +289,18 @@ class MultiFrameRawSR(nn.Module):
         feature_map = rearrange(feature_map, "(b f) c h w -> b f c h w", b=B, f=F, h=H2 // 2, w=W2 // 2)
 
         # 4. Meta-upsampling to high resolution and RGB reconstruction:
+        h_out = int(H2 * scale)
+        w_out = int(W2 * scale)
+        grid_y = torch.linspace(0, H2 // 2 - 1, h_out, device=feature_map.device) / ((H2 // 2) - 1) * 2 - 1
+        grid_x = torch.linspace(0, W2 // 2 - 1, w_out, device=feature_map.device) / ((W2 // 2) - 1) * 2 - 1
+        grid_y, grid_x = torch.meshgrid(grid_y, grid_x, indexing="ij")
+        grid = torch.stack((grid_x, grid_y), dim=-1)  # shape: (h_out, w_out, 2)
+        grid = repeat(grid, "i j xy -> b i j xy", b=B)  # repeat grid for all batches
+
         out_frames = []
         for f_idx in range(F):
             feat = feature_map[:, f_idx]  # (B, embed_dim, H2/2, W2/2) for frame f_idx
             # Upsample feature map by 'scale' using bilinear grid sampling (placeholder for meta-upscale):
-            h_out = int(H2 * scale)
-            w_out = int(W2 * scale)
-            grid_y = torch.linspace(0, H2 // 2 - 1, h_out, device=feat.device) / ((H2 // 2) - 1) * 2 - 1
-            grid_x = torch.linspace(0, W2 // 2 - 1, w_out, device=feat.device) / ((W2 // 2) - 1) * 2 - 1
-            grid_y, grid_x = torch.meshgrid(grid_y, grid_x, indexing="ij")
-            grid = torch.stack((grid_x, grid_y), dim=-1)  # shape: (h_out, w_out, 2)
-            grid = repeat(grid, "i j xy -> b i j xy", b=B)  # repeat grid for all batches
             highres_feat = nn.functional.grid_sample(feat, grid, mode="bilinear", align_corners=True)
             # Convert high-res features to RGB image:
             rgb = self.toRGB(highres_feat)  # shape: (B, 3, h_out, w_out)
