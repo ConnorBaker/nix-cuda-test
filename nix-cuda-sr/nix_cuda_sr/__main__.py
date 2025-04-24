@@ -4,12 +4,13 @@ from pathlib import Path
 import torch
 from pytorch_lightning.plugins import TransformerEnginePrecision
 from pytorch_lightning.trainer.trainer import Trainer
+from pytorch_lightning.tuner import Tuner
 from transformer_engine.common.recipe import DelayedScaling
 
 import nix_cuda_sr
 from nix_cuda_sr.sr_data_module import SRDataModule
 from nix_cuda_sr.wrapped_te_vit import WrappedViT
-from nix_cuda_sr.wrapped_conv_net import WrappedConvNet
+from nix_cuda_sr.wrapped_mlp_mixer import WrappedMLPMixer
 
 
 def main() -> None:
@@ -64,7 +65,7 @@ def main() -> None:
 
     # init the model directly on the device and with parameters in half-precision
     with trainer.init_module():
-        model = WrappedConvNet(
+        model = WrappedMLPMixer(
             upscale_factor=2,
             embed_dim=args.embed_dim,
             # ffn_dim=args.ffn_dim,
@@ -76,18 +77,26 @@ def main() -> None:
         )
         model = model.to(memory_format=torch.channels_last_3d)
 
+        datamodule = SRDataModule(
+            root=Path("/home/connorbaker/Pictures/Tensor-256-ARW"),
+            batch_size=args.batch_size,
+        )
+
     # NOTE: didn't see a performance improvement with `fuse_wgrad_accumulation` on the 4090.
     # Did see a large decrease in training and validation accuracy.
 
     # if args.compile:
     # model = torch.compile(model)  # type: ignore[assignment]
 
+    tuner = Tuner(trainer)
+    found_lr = tuner.lr_find(
+        model, datamodule=datamodule, max_lr=args.lr, num_training=100, mode="exponential", early_stop_threshold=None
+    )
+    print(f"Found learning rates: {found_lr.results}")
+
     trainer.fit(
-        datamodule=SRDataModule(
-            root=Path("/home/connorbaker/Pictures/Tensor-256-ARW"),
-            batch_size=args.batch_size,
-        ),
-        model=model,  # type: ignore[arg-type]
+        model,  # type: ignore[arg-type]
+        datamodule=datamodule,
     )
 
 
