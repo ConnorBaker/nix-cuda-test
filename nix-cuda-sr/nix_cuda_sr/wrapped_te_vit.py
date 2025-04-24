@@ -1,7 +1,9 @@
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 
+import optuna
 import pytorch_lightning as pl
+import schedulefree
 import torch
 import torchmetrics
 import torchmetrics.image
@@ -24,7 +26,11 @@ from nix_cuda_sr.multi_frame_raw_sr import MultiFrameRawSR
 class WrappedViT(pl.LightningModule):
     # Args
     upscale_factor: int
-    n_channels: int
+    embed_dim: int
+    ffn_dim: int
+    num_heads: int
+    num_layers: int
+    patch_size: int
 
     # Optimizer args
     lr: float
@@ -51,7 +57,13 @@ class WrappedViT(pl.LightningModule):
         self.loss_metric = "dists"
         self.train_metrics = metrics.clone(prefix="train_")
         self.val_metrics = metrics.clone(prefix="val_")
-        self.model = MultiFrameRawSR()
+        self.model = MultiFrameRawSR(
+            embed_dim=self.embed_dim,
+            ffn_dim=self.ffn_dim,
+            num_heads=self.num_heads,
+            num_layers=self.num_layers,
+            patch_size=self.patch_size,
+        )
 
     def forward(self, test_input: Tensor) -> Tensor:  # type: ignore[override]
         output = self.model(test_input)
@@ -107,21 +119,38 @@ class WrappedViT(pl.LightningModule):
         metrics: Mapping[str, Tensor] = self.val_metrics(demosaicked_resolved_hr_imgs, demosaicked_hr_imgs)
         self.log_dict(metrics, prog_bar=True)
 
+        # TODO: This should be a callback to prevent this kind of coupling.
+        if self.current_epoch > 0:
+            for metric in ["psnr", "ssim", "msssim", "dists"]:
+                if metrics[f"val_{metric}"] < 0.0:
+                    raise optuna.TrialPruned(f"{metric} is negative")
+
         return metrics[f"val_{self.loss_metric}"]
 
     # NOTE: Is this necessary?
-    # def on_validation_epoch_end(self):
-    #     output = self.val_metrics.compute()
-    #     self.log_dict(output)
-    #     # remember to reset metrics at the end of the epoch
-    #     self.val_metrics.reset()
+    def on_validation_epoch_end(self):
+        output = self.val_metrics.compute()
+        self.log_dict(output)
+        # remember to reset metrics at the end of the epoch
+        self.val_metrics.reset()
+
+    # def configure_optimizers(self) -> tuple[list[Optimizer], list[torch.optim.lr_scheduler.LRScheduler]]:
+    #     optimizer: Optimizer = te.optimizers.FusedAdam(
+    #         self.model.parameters(),
+    #         lr=self.lr,
+    #         weight_decay=self.weight_decay,
+    #         # exp_avg_dtype=torch.float16,
+    #         # exp_avg_sq_dtype=torch.float16,
+    #     )
+    #     scheduler = torch.optim.lr_scheduler.OneCycleLR(
+    #         optimizer, max_lr=1e-3, total_steps=int(self.trainer.estimated_stepping_batches)
+    #     )
+    #     return [optimizer], [scheduler]
 
     def configure_optimizers(self) -> Optimizer:
-        optimizer: Optimizer = te.optimizers.FusedAdam(
+        optimizer: Optimizer = schedulefree.RAdamScheduleFreeClosure(
             self.model.parameters(),
             lr=self.lr,
             weight_decay=self.weight_decay,
-            exp_avg_dtype=torch.float16,
-            exp_avg_sq_dtype=torch.float16,
         )
         return optimizer

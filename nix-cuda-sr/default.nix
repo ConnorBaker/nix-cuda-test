@@ -13,7 +13,10 @@
   pytorch-lightning,
   rawpy,
   ruff,
+  schedulefree,
+  tensorboard-plugin-profile,
   torch,
+  torch-tb-profiler,
   torchmetrics,
   torchvision,
   transformer-engine,
@@ -55,7 +58,10 @@ let
       optuna
       pillow
       rawpy
+      schedulefree
+      tensorboard-plugin-profile
       torch
+      torch-tb-profiler
       torchmetrics
       torchvision
       transformer-engine

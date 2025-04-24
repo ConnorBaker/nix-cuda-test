@@ -50,8 +50,15 @@ class SRDataset(VisionDataset):
         self.batch_burst_paths = []
         for burst_length in sorted(batch_burst_paths.keys()):
             # Skip burst lengths that are too long or don't have enough bursts.
-            if burst_length > 13:
+            # if burst_length > 13:
+            #     continue
+
+            # TODO(@connorbaker): Gross, just while testing to make sure the network *can* converge.
+            if burst_length != 1:
                 continue
+            # if burst_length < 4 or 24 < burst_length:
+            #     continue
+
             # Adjust the batch size based on the burst length.
             # Each batch will contain at least one burst.
             adjusted_batch_size = max(self.batch_size // burst_length, 1)
@@ -77,8 +84,10 @@ class SRDataset(VisionDataset):
                         map_location=torch.device("cuda"),
                         mmap=True,
                         weights_only=True,
+                    # ),
                     ).to(memory_format=torch.channels_last),
-                    dtype=torch.float32,
+                    # dtype=torch.float32,
+                    dtype=torch.bfloat16,
                     scale=True,
                 )
                 for burst_path in burst_paths
@@ -93,8 +102,10 @@ class SRDataset(VisionDataset):
                         map_location=torch.device("cuda"),
                         mmap=True,
                         weights_only=True,
+                    # ),
                     ).to(memory_format=torch.channels_last),
-                    dtype=torch.float32,
+                    # dtype=torch.float32,
+                    dtype=torch.bfloat16,
                     scale=True,
                 )
                 for burst_path in burst_paths

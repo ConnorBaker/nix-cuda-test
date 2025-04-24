@@ -18,7 +18,10 @@ dependencies = [
     "einops",
     "pillow",
     "optuna",
+    "schedulefree",
+    "tensorboard-plugin-profile",
     "torch>=2.0", # torch comes with PyTorch's triton build
+    "torch-tb-profiler",
     "torchmetrics",
     "torchvision",
     "transformer-engine",

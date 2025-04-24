@@ -6,6 +6,8 @@ final: prev: {
       flash-attn = finalPythonPackages.callPackage ./flash-attn.nix { };
       # TODO: Upstream
       transformer-engine = finalPythonPackages.callPackage ./transformer-engine.nix { };
+      # TODO: Upstream
+      schedulefree = finalPythonPackages.callPackage ./schedulefree.nix { };
       torch =
         # Could not find CUPTI library, using CPU-only Kineto build
         # Could NOT find NCCL (missing: NCCL_INCLUDE_DIR)
