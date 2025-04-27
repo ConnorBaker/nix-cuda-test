@@ -1,8 +1,8 @@
 import json
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Literal
+from typing import Literal
 
 import pytorch_lightning as pl
 import torch
@@ -84,7 +84,7 @@ class SRDataset(VisionDataset):
                         map_location=torch.device("cuda"),
                         mmap=True,
                         weights_only=True,
-                    # ),
+                        # ),
                     ).to(memory_format=torch.channels_last),
                     # dtype=torch.float32,
                     dtype=torch.bfloat16,
@@ -102,7 +102,7 @@ class SRDataset(VisionDataset):
                         map_location=torch.device("cuda"),
                         mmap=True,
                         weights_only=True,
-                    # ),
+                        # ),
                     ).to(memory_format=torch.channels_last),
                     # dtype=torch.float32,
                     dtype=torch.bfloat16,
@@ -184,7 +184,7 @@ class SRDataModule(pl.LightningDataModule):
         self.val_dataset = SRDataset(self.root, self.batch_size, split="test")
 
     # Depends on the type of train_transforms
-    def train_dataloader(self) -> Iterable[Any]:
+    def train_dataloader(self) -> DataLoader[tuple[Tensor, Tensor]]:
         return DataLoader(
             dataset=self.train_dataset,
             batch_size=None,
@@ -195,7 +195,7 @@ class SRDataModule(pl.LightningDataModule):
         )
 
     # Depends on the type of val_transforms
-    def val_dataloader(self) -> Iterable[Any]:
+    def val_dataloader(self) -> DataLoader[tuple[Tensor, Tensor]]:
         return DataLoader(
             dataset=self.val_dataset,
             batch_size=None,

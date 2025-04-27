@@ -6,6 +6,7 @@
   flit-core,
   lib,
   makeWrapper,
+  onnx,
   optuna,
   pillow,
   pydantic,
@@ -15,6 +16,8 @@
   ruff,
   schedulefree,
   tensorboard-plugin-profile,
+  tensorrt,
+  modelopt,
   torch,
   torch-tb-profiler,
   torchmetrics,
@@ -60,13 +63,16 @@ let
       rawpy
       schedulefree
       tensorboard-plugin-profile
+      onnx
+      tensorrt
+      modelopt
       torch
       torch-tb-profiler
       torchmetrics
       torchvision
       transformer-engine
       triton
-    ];
+    ] ++ modelopt.passthru.optional-dependencies.torch;
 
     pythonImportsCheck = [ "nix_cuda_sr" ];
 

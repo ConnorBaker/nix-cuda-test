@@ -30,27 +30,28 @@ final: prev: {
 
             USE_CUFILE = 1;
           });
-      triton = prevPythonPackages.triton.overrideAttrs (
-        let
-          inherit (final.stdenv) cc;
-        in
-        finalAttrs: prevAttrs: {
-          env = prevAttrs.env or { } // {
-            CC = "${cc}/bin/${cc.targetPrefix}cc";
-            CXX = "${cc}/bin/${cc.targetPrefix}c++";
-          };
-          preConfigure =
-            prevAttrs.preConfigure or ""
-            # Patch in our compiler.
-            # https://github.com/triton-lang/triton/blob/cf34004b8a67d290a962da166f5aa2fc66751326/python/triton/runtime/build.py#L25
-            + ''
-              substituteInPlace "$NIX_BUILD_TOP/$sourceRoot/python/triton/runtime/build.py" \
-                --replace-fail \
-                  'cc = os.environ.get("CC")' \
-                  'cc = "${finalAttrs.env.CC}"'
-            '';
-        }
-      );
+      # triton = prevPythonPackages.triton.overrideAttrs (
+      #   let
+      #     inherit (final.stdenv) cc;
+      #   in
+      #   finalAttrs: prevAttrs: {
+      #     env = prevAttrs.env or { } // {
+      #       CC = "${cc}/bin/${cc.targetPrefix}cc";
+      #       CXX = "${cc}/bin/${cc.targetPrefix}c++";
+      #     };
+      #     preConfigure =
+      #       prevAttrs.preConfigure or ""
+      #       # Patch in our compiler.
+      #       # https://github.com/triton-lang/triton/blob/cf34004b8a67d290a962da166f5aa2fc66751326/python/triton/runtime/build.py#L25
+      #       + ''
+      #         cat "$NIX_BUILD_TOP/$sourceRoot/python/triton/runtime/build.py"
+      #         substituteInPlace "$NIX_BUILD_TOP/$sourceRoot/python/triton/runtime/build.py" \
+      #           --replace-fail \
+      #             'cc = os.environ.get("CC")' \
+      #             'cc = "${finalAttrs.env.CC}"'
+      #       '';
+      #   }
+      # );
     })
   ];
 }

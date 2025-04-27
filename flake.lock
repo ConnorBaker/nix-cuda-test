@@ -8,11 +8,11 @@
         "treefmt-nix": "treefmt-nix"
       },
       "locked": {
-        "lastModified": 1744268656,
-        "narHash": "sha256-v51+Ezy67gEAWleivN2VRmrs1X4AHa8ezKSK/WV8wOg=",
+        "lastModified": 1745642349,
+        "narHash": "sha256-u/7H83JsQORY4WcLDrrIYew8EQCf+OR9aMKnxWfjrV0=",
         "owner": "ConnorBaker",
         "repo": "cuda-packages",
-        "rev": "cb7557bc710a3d9e49480d34690d714d6207e2f7",
+        "rev": "d2dec90a3aff5323ef47f49b2955c78f3e0a3120",
         "type": "github"
       },
       "original": {
@@ -105,11 +105,11 @@
     },
     "nixpkgs": {
       "locked": {
-        "lastModified": 1744150034,
-        "narHash": "sha256-RgaD2g18dKizEo55izwUyeKeUgMawkPPWx0mBodopKM=",
+        "lastModified": 1745271639,
+        "narHash": "sha256-rtSbb+f8mYAe8dyEg22l+7Kgzkb2MXlr1iDM53GQkzE=",
         "owner": "ConnorBaker",
         "repo": "nixpkgs",
-        "rev": "2b38a565ce61f4f3070007ffd850e5fb15a29b5b",
+        "rev": "033504a7c3be3d595b791332197e9673f2a4440c",
         "type": "github"
       },
       "original": {
@@ -148,11 +148,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1743748085,
-        "narHash": "sha256-uhjnlaVTWo5iD3LXics1rp9gaKgDRQj6660+gbUU3cE=",
+        "lastModified": 1744961264,
+        "narHash": "sha256-aRmUh0AMwcbdjJHnytg1e5h5ECcaWtIFQa6d9gI85AI=",
         "owner": "numtide",
         "repo": "treefmt-nix",
-        "rev": "815e4121d6a5d504c0f96e5be2dd7f871e4fd99d",
+        "rev": "8d404a69efe76146368885110f29a2ca3700bee6",
         "type": "github"
       },
       "original": {

@@ -31,12 +31,22 @@ def _setup() -> None:
 
     # torch._inductor.config.compile_threads = 1
     torch._inductor.config.dce = True
+    torch._inductor.config.enable_auto_functionalized_v2 = True
+    torch._inductor.config.memory_planning = True
     torch._inductor.config.permute_fusion = True
     torch._inductor.config.b2b_gemm_pass = True
     torch._inductor.config.max_autotune = True
     torch._inductor.config.max_autotune_pointwise = True
+    torch._inductor.config.max_autotune_gemm_backends = "ATEN,TRITON,CPP,CUTLASS"
+    torch._inductor.config.max_autotune_conv_backends = "ATEN,TRITON,CPP,CUTLASS"
+    torch._inductor.config.max_autotune_gemm_search_space = "EXHAUSTIVE"
     torch._inductor.config.max_autotune_gemm = True
+    torch._inductor.config.force_layout_optimization = True
     torch._inductor.config.warn_mix_layout = True
+    torch._inductor.config.pad_channels_last = True
+    torch._inductor.config.use_minimal_arrayref_interface = True
+    torch._inductor.config.decompose_mem_bound_mm = True
+    torch._inductor.config.assume_aligned_inputs = True
 
     # enable the combo kernel that combines data-independent kernels (additional
     # to foreach kernels) into a single one (Experimental)

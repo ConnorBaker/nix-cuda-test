@@ -12,15 +12,18 @@ keywords = ["nix", "machine", "learning", "torch", "gpu", "test", "cuda"]
 license = { text = "BSD-3-Clause" }
 dependencies = [
     "flash-attn",
-    "pydantic>=1.10.8",
+    "pydantic",
     "pytorch-lightning",
     "rawpy",
     "einops",
     "pillow",
     "optuna",
     "schedulefree",
+    "onnx",
+    "tensorrt",
+    "modelopt[torch]",
     "tensorboard-plugin-profile",
-    "torch>=2.0", # torch comes with PyTorch's triton build
+    "torch", # torch comes with PyTorch's triton build
     "torch-tb-profiler",
     "torchmetrics",
     "torchvision",
