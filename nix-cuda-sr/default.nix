@@ -1,6 +1,7 @@
 {
   buildPythonPackage,
   config,
+  cutlass,
   einops,
   flash-attn,
   flit-core,
@@ -54,18 +55,19 @@ let
     nativeBuildInputs = [ makeWrapper ];
 
     dependencies = [
-      flash-attn
-      pydantic
-      pytorch-lightning
+      cutlass
       einops
+      flash-attn
+      modelopt
+      onnx
       optuna
       pillow
+      pydantic
+      pytorch-lightning
       rawpy
       schedulefree
       tensorboard-plugin-profile
-      onnx
       tensorrt
-      modelopt
       torch
       torch-tb-profiler
       torchmetrics

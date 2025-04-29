@@ -7,10 +7,11 @@ name = "nix_cuda_sr"
 version = "0.1.0"
 authors = [{ name = "Connor Baker", email = "connorbaker01@gmail.com" }]
 description = "Test project for Nix CUDA support"
-requires-python = ">=3.10"
+requires-python = ">=3.12"
 keywords = ["nix", "machine", "learning", "torch", "gpu", "test", "cuda"]
 license = { text = "BSD-3-Clause" }
 dependencies = [
+    "cutlass",
     "flash-attn",
     "pydantic",
     "pytorch-lightning",

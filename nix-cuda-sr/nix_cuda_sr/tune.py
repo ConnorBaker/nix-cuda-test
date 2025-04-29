@@ -15,7 +15,8 @@ def objective(trial: optuna.trial.Trial) -> float:
     hyperparameters = dict(
         embed_dim=trial.suggest_int("embed_dim", 16, 512, step=16),
         depth=trial.suggest_int("depth", 1, 5),
-        patch_size=trial.suggest_int("patch_size", 8, 64, step=8),
+        # Patch size must be a divisor of 128
+        patch_size=trial.suggest_categorical("patch_size", [2**i for i in range(3, 6)]),
         lr=trial.suggest_float("lr", 1e-5, 1e-2),
         weight_decay=trial.suggest_float("weight_decay", 1e-5, 1e-2),
     )
