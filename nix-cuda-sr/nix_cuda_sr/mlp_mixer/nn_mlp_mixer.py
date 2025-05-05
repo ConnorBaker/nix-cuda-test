@@ -1,3 +1,5 @@
+from collections.abc import Sequence
+
 import torch
 from einops.layers.torch import Rearrange
 from torch import Tensor, nn
@@ -68,7 +70,7 @@ class NNMLPMixer(nn.Module):
         # Model parameters
         upscale_factor: int,
         embed_dim: int,
-        depth: int,
+        hidden_sizes: Sequence[int],
         patch_size: int,
         # Model optimization parameters
         compile_model: bool,
@@ -78,7 +80,7 @@ class NNMLPMixer(nn.Module):
         # Model parameters
         self.upscale_factor = 2 * upscale_factor  # doubled to account for demosaicking
         self.embed_dim = embed_dim
-        self.depth = depth
+        self.hidden_sizes = hidden_sizes
         self.patch_size = patch_size
 
         # Model optimization parameters
@@ -98,11 +100,7 @@ class NNMLPMixer(nn.Module):
             # MLP layers
             # TODO: LucidRains' implementation alternates between a convolution and a linear layer.
             # https://github.com/lucidrains/mlp-mixer-pytorch/blob/bcd54afa1d41afb0911f8c92657907d2ef95c6c6/mlp_mixer_pytorch/mlp_mixer_3d_pytorch.py#L37
-            *[
-                # NOTE: 4 is an arbitrary expansion factor.
-                NNMLPMixerLayer(self.embed_dim, 4 * self.embed_dim)
-                for _ in range(self.depth)
-            ],
+            *[NNMLPMixerLayer(self.embed_dim, hidden_size) for hidden_size in hidden_sizes],
             # Flatten the output for the final projection which performs upscaling
             # NOTE: s = other spatial dims (f h w), e = embed_dim
             Rearrange("b (c s) e -> b s (c e)", c=4),

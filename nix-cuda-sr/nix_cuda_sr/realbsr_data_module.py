@@ -90,7 +90,7 @@ class RealBSRDataModule(pl.LightningDataModule):
             num_workers=2,
             # num_workers=0,
             # prefetch_factor=4,
-            pin_memory=True,
+            pin_memory=False,
             drop_last=True,
             shuffle=True,
         )
@@ -103,7 +103,7 @@ class RealBSRDataModule(pl.LightningDataModule):
             num_workers=2,
             # num_workers=0,
             # prefetch_factor=4,
-            pin_memory=True,
+            pin_memory=False,
             drop_last=False,
             shuffle=False,
         )

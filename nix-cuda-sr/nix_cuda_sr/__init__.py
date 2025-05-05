@@ -4,7 +4,6 @@ __version__ = "0.1.0"
 def _setup() -> None:
     import warnings  # noqa: PLC0415
 
-    import cutlass  # noqa: PLC0415
     import torch  # noqa: PLC0415
     import torch._dynamo.config  # noqa: PLC0415
     import torch._inductor.config  # noqa: PLC0415
@@ -71,15 +70,8 @@ def _setup() -> None:
     torch._inductor.config.cuda.enable_cuda_lto = True
     torch._inductor.config.cuda.use_fast_math = True
 
-    # TODO(@connorbaker):
-    # W0427 10:19:54.654000 810187 torch/_inductor/utils.py:1115] [0/0] Failed to import CUTLASS lib. Please check
-    # whether _inductor.config.cuda.cutlass_dir is set correctly. Skipping CUTLASS backend for now.
-    # TODO(@connorbaker): Patch the PyTorch build to replace the default value with the one for cutlass src in the Nix
-    # store.
-    torch._inductor.config.cuda.cutlass_dir = cutlass.source_path
-
-    torch._dynamo.config.cache_size_limit = 8192
-    torch._dynamo.config.accumulated_cache_size_limit = 65536
+    torch._dynamo.config.cache_size_limit = 2 << 20
+    torch._dynamo.config.accumulated_cache_size_limit = 2 << 20
     # torch._dynamo.reset()  # type: ignore[no-untyped-call]
 
     warnings.filterwarnings("ignore", category=DeprecationWarning)

@@ -1,3 +1,5 @@
+from collections.abc import Sequence
+
 import torch
 import transformer_engine.pytorch as te
 from einops.layers.torch import Rearrange
@@ -5,6 +7,7 @@ from torch import Tensor, nn
 
 from nix_cuda_sr.mlp_mixer.nn_mlp_mixer import SkipConnection
 
+_PARAMS_DTYPE = torch.bfloat16  # type: ignore[assignment]
 
 # TODO: Is this enough? Or do I need to set this attribute on *all* params,
 # regardless of whether they're coming from a Transformer Engine model?
@@ -17,13 +20,23 @@ def maybe_fuse_wgrad_accumulation(model: nn.Module) -> nn.Module:
     if model.fuse_wgrad_accumulation:
         for param in model.parameters():
             param.grad = None
-            setattr(param, "main_grad", torch.zeros_like(param, dtype=torch.float32))
+            setattr(
+                param,
+                "main_grad",
+                torch.zeros_like(
+                    param,
+                    # dtype=torch.float32,
+                    dtype=_PARAMS_DTYPE,
+                ),
+            )
 
     return model
 
 
 class TEMLPBlock(nn.Module):
-    def __init__(self, hidden_size: int, ffn_hidden_size: int, fuse_wgrad_accumulation: bool) -> None:
+    def __init__(
+        self, hidden_size: int, ffn_hidden_size: int, fuse_wgrad_accumulation: bool
+    ) -> None:
         super().__init__()
         self.hidden_size = hidden_size
         self.ffn_hidden_size = ffn_hidden_size
@@ -35,6 +48,7 @@ class TEMLPBlock(nn.Module):
                     self.hidden_size,
                     self.ffn_hidden_size,
                     fuse_wgrad_accumulation=self.fuse_wgrad_accumulation,
+                    params_dtype=_PARAMS_DTYPE,
                 )
             ),
             nn.GELU(),
@@ -43,6 +57,7 @@ class TEMLPBlock(nn.Module):
                     self.ffn_hidden_size,
                     self.hidden_size,
                     fuse_wgrad_accumulation=self.fuse_wgrad_accumulation,
+                    params_dtype=_PARAMS_DTYPE,
                 )
             ),
         )
@@ -57,7 +72,9 @@ class TEMLPBlock(nn.Module):
 
 
 class TEMLPMixerLayer(nn.Module):
-    def __init__(self, hidden_size: int, ffn_hidden_size: int, fuse_wgrad_accumulation: bool) -> None:
+    def __init__(
+        self, hidden_size: int, ffn_hidden_size: int, fuse_wgrad_accumulation: bool
+    ) -> None:
         super().__init__()
         self.hidden_size = hidden_size
         self.ffn_hidden_size = ffn_hidden_size
@@ -73,10 +90,15 @@ class TEMLPMixerLayer(nn.Module):
         self.model = te.ops.Sequential(
             SkipConnection(
                 te.ops.Sequential(
-                    te.LayerNorm(self.hidden_size),
+                    te.LayerNorm(
+                        self.hidden_size,
+                        params_dtype=_PARAMS_DTYPE,
+                    ),
                     # NOTE: s = spatial dims (c f h w), e = embed_dim
                     Rearrange("b s e -> b e s"),
-                    TEMLPBlock(num_patches, self.ffn_hidden_size, self.fuse_wgrad_accumulation),
+                    TEMLPBlock(
+                        num_patches, self.ffn_hidden_size, self.fuse_wgrad_accumulation
+                    ),
                     Rearrange("b e s -> b s e"),
                 ),
             ),
@@ -86,6 +108,7 @@ class TEMLPMixerLayer(nn.Module):
                         self.hidden_size,
                         self.ffn_hidden_size,
                         fuse_wgrad_accumulation=self.fuse_wgrad_accumulation,
+                        params_dtype=_PARAMS_DTYPE,
                     )
                 )
             ),
@@ -106,7 +129,7 @@ class TEMLPMixer(nn.Module):
         # Model parameters
         upscale_factor: int,
         embed_dim: int,
-        depth: int,
+        hidden_sizes: Sequence[int],
         patch_size: int,
         # Model optimization parameters
         compile_model: bool,
@@ -117,7 +140,7 @@ class TEMLPMixer(nn.Module):
         # Model parameters
         self.upscale_factor = 2 * upscale_factor  # doubled to account for demosaicking
         self.embed_dim = embed_dim
-        self.depth = depth
+        self.hidden_sizes = hidden_sizes
         self.patch_size = patch_size
 
         # Model optimization parameters
@@ -129,22 +152,29 @@ class TEMLPMixer(nn.Module):
             # Linear/MLP requires channel dimension be last.
             # TODO: Number of frames varies, so we cannot include it in the channel dimension at the end since the
             # embedding dimension is fixed.
-            Rearrange("b c f (h hp) (w wp) -> b (c f h w) (hp wp)", c=4, hp=self.patch_size, wp=self.patch_size),
+            Rearrange(
+                "b c f (h hp) (w wp) -> b (c f h w) (hp wp)",
+                c=4,
+                hp=self.patch_size,
+                wp=self.patch_size,
+            ),
             # Linear transform to embed_dim
             maybe_fuse_wgrad_accumulation(
                 te.Linear(
                     self.patch_size**2,
                     self.embed_dim,
                     fuse_wgrad_accumulation=self.fuse_wgrad_accumulation,
+                    params_dtype=_PARAMS_DTYPE,
                 )
             ),
             # MLP layers
             # TODO: LucidRains' implementation alternates between a convolution and a linear layer.
             # https://github.com/lucidrains/mlp-mixer-pytorch/blob/bcd54afa1d41afb0911f8c92657907d2ef95c6c6/mlp_mixer_pytorch/mlp_mixer_3d_pytorch.py#L37
             *[
-                # NOTE: 4 is an arbitrary expansion factor.
-                TEMLPBlock(self.embed_dim, 4 * self.embed_dim, self.fuse_wgrad_accumulation)
-                for _ in range(self.depth)
+                TEMLPMixerLayer(
+                    self.embed_dim, hidden_size, self.fuse_wgrad_accumulation
+                )
+                for hidden_size in self.hidden_sizes
             ],
             # Flatten the output for the final projection which performs upscaling
             # NOTE: s = other spatial dims (f h w), e = embed_dim
@@ -157,6 +187,7 @@ class TEMLPMixer(nn.Module):
                     # NOTE: 3 channels in the output image
                     3 * (self.upscale_factor * self.patch_size) ** 2,
                     fuse_wgrad_accumulation=self.fuse_wgrad_accumulation,
+                    params_dtype=_PARAMS_DTYPE,
                 )
             ),
             Rearrange(
@@ -177,7 +208,9 @@ class TEMLPMixer(nn.Module):
             model = model.to(memory_format=torch.channels_last_3d)  # type: ignore
         if self.compile_model:
             # NOTE: Transformer Engine doesn't support fullgraph=True yet.
-            model = torch.compile(model, fullgraph=False, dynamic=False, mode="max-autotune")  # type: ignore
+            model = torch.compile(
+                model, fullgraph=False, dynamic=True, mode="max-autotune"
+            )  # type: ignore
         self.model = model
 
     def forward(self, x: Tensor) -> Tensor:  # type: ignore[override]

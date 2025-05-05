@@ -1,36 +1,60 @@
 import logging
 import sys
+from collections.abc import Sequence
 from pathlib import Path
+from typing import TypedDict
 
 import optuna
-from pytorch_lightning.trainer.trainer import Trainer
+from pytorch_lightning.callbacks import StochasticWeightAveraging
+from pytorch_lightning.trainer import Trainer
+from pytorch_lightning.tuner.tuning import Tuner
 
 import nix_cuda_sr
 from nix_cuda_sr.mlp_mixer.mlp_mixer import MLPMixer
 from nix_cuda_sr.mlp_mixer.te_mlp_mixer import TEMLPMixer
-from nix_cuda_sr.sr_data_module import SRDataModule
+from nix_cuda_sr.realbsr_data_module import RealBSRDataModule
+import torch
+
+
+class MLPArgs(TypedDict):
+    embed_dim: int
+    hidden_sizes: Sequence[int]
+    patch_size: int
+    lr: float
+    weight_decay: float
 
 
 def objective(trial: optuna.trial.Trial) -> float:
-    hyperparameters = dict(
+    args: MLPArgs = MLPArgs(
         embed_dim=trial.suggest_int("embed_dim", 16, 512, step=16),
-        depth=trial.suggest_int("depth", 1, 5),
+        hidden_sizes=[
+            trial.suggest_int(f"hidden_size_{i}", 16, 512, step=16) for i in range(trial.suggest_int("depth", 1, 16))
+        ],
         # Patch size must be a divisor of 128
-        patch_size=trial.suggest_categorical("patch_size", [2**i for i in range(3, 6)]),
+        # patch_size=trial.suggest_categorical("patch_size", [2**i for i in range(3, 6)]),
+        patch_size=20,
         lr=trial.suggest_float("lr", 1e-5, 1e-2),
         weight_decay=trial.suggest_float("weight_decay", 1e-5, 1e-2),
     )
 
     trainer = Trainer(
         accelerator="auto",
-        accumulate_grad_batches=1,
+        # accumulate_grad_batches=8,
+        # gradient_clip_val=0.75,
         benchmark=True,
         deterministic=False,
         devices="auto",
-        max_epochs=100,
-        check_val_every_n_epoch=100,
+        max_epochs=10,
+        # check_val_every_n_epoch=2,
+        # num_sanity_val_steps=0,
         precision="transformer-engine",
+        # callbacks=[StochasticWeightAveraging(swa_lrs=1e-2)],
         strategy="auto",
+    )
+
+    datamodule = RealBSRDataModule(
+        root=Path("/home/connorbaker/RealBSR/RAW"),
+        batch_size=4,
     )
 
     # init the model directly on the device and with parameters in half-precision
@@ -38,31 +62,25 @@ def objective(trial: optuna.trial.Trial) -> float:
         model = MLPMixer(
             model=TEMLPMixer(
                 # Model parameters
-                upscale_factor=2,
-                embed_dim=hyperparameters["embed_dim"],
-                depth=hyperparameters["depth"],
-                patch_size=hyperparameters["patch_size"],
+                upscale_factor=4,
+                embed_dim=args["embed_dim"],
+                hidden_sizes=args["hidden_sizes"],
+                patch_size=args["patch_size"],
                 # Model optimization parameters
                 compile_model=True,
                 fuse_wgrad_accumulation=True,
                 channels_last=True,
             ),
-            lr=hyperparameters["lr"],
-            weight_decay=hyperparameters["weight_decay"],
+            lr=args["lr"],
+            weight_decay=args["weight_decay"],
         )
 
-        datamodule = SRDataModule(
-            root=Path("/home/connorbaker/Pictures/Tensor-256-ARW"),
-            batch_size=16,
-        )
+    assert trainer.logger is not None
+    trainer.logger.log_hyperparams(args)
 
-    trainer.logger.log_hyperparams(hyperparameters)
-    trainer.fit(
-        model,  # type: ignore[arg-type]
-        datamodule=datamodule,
-    )
+    trainer.fit(model, datamodule=datamodule)
 
-    return trainer.callback_metrics["val_dists"].item()
+    return trainer.callback_metrics["validation_dists"].item()
 
 
 if __name__ == "__main__":
@@ -74,8 +92,12 @@ if __name__ == "__main__":
     # Add stream handler of stdout to show the messages
     optuna.logging.get_logger("optuna").addHandler(logging.StreamHandler(sys.stdout))
     study = optuna.create_study(
-        study_name="nix-cuda-sr-optuna", storage="sqlite:///nix-cuda-sr-optuna.db", direction="minimize"
+        study_name="nix-cuda-sr-optuna",
+        storage="sqlite:///nix-cuda-sr-optuna.db",
+        direction="minimize",
+        load_if_exists=True,
     )
+
     study.optimize(objective, n_trials=100)
 
     print("Number of finished trials: {}".format(len(study.trials)))
