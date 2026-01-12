@@ -55,7 +55,6 @@ class MLPMixer(pl.LightningModule):
             stage: metrics.clone(prefix=f"{stage}_") for stage in ("training", "validation")
         }
 
-        # TODO: Optimize the model with TensorRT.
         # NOTE: Since there's no internal state, we can use the same model for training and validation.
         dists: nn.Module = NoTrainDISTS(load_weights=True)
         dists = dists.eval()
@@ -65,21 +64,24 @@ class MLPMixer(pl.LightningModule):
         if self.model.compile_model:
             # NOTE: For some reason, cannot use dynamic=True: we get an error "cannot determine truth value of
             # Relational"
-            dists = torch.compile(
-                dists, fullgraph=True, dynamic=False, mode="max-autotune"
-            )  # type: ignore
+            dists = torch.compile(dists, fullgraph=True, dynamic=False, mode="max-autotune")  # type: ignore
         self.dists = dists
 
     def configure_optimizers(self) -> Optimizer:
+        # With master weights: 9.6GB
+        # With master weights and store_param_remainders: 9.1GB
+        # Without master weights: 8.7GB
+        # Without master weights and with f16 for exp_avg and exp_avg_sq: 8.2GB
+        # Without master weights and with bf16 for exp_avg and exp_avg_sq: 8.2GB
+        # Without master weights and with uint8 for exp_avg and exp_avg_sq: 8.2GB
         optimizer: Optimizer = FusedAdam(
             self.model.parameters(),
             lr=self.lr,
             weight_decay=self.weight_decay,
-            master_weights=True,
-            master_weight_dtype=torch.float32,
-            store_param_remainders=True,
-            # exp_avg_dtype=torch.uint8,
-            # exp_avg_sq_dtype=torch.uint8,
+            # NOTE: This requires the param type to be bfloat16.
+            # master_weights=True,
+            # master_weight_dtype=torch.float32,
+            # store_param_remainders=True,
         )
         # scheduler: LRScheduler = CosineAnnealingWarmRestarts(
         #     optimizer,
@@ -100,22 +102,16 @@ class MLPMixer(pl.LightningModule):
         lr_unpacked_mosaicked_imgs = batch[0].to(
             device=device,
             non_blocking=True,
-            memory_format=torch.channels_last_3d
-            if self.model.channels_last
-            else torch.preserve_format,
+            memory_format=torch.channels_last_3d if self.model.channels_last else torch.preserve_format,
         )
         hr_demosaicked_img = batch[1].to(
             device=device,
             non_blocking=True,
-            memory_format=torch.channels_last
-            if self.model.channels_last
-            else torch.preserve_format,
+            memory_format=torch.channels_last if self.model.channels_last else torch.preserve_format,
         )
         return lr_unpacked_mosaicked_imgs, hr_demosaicked_img
 
-    def stage_step(
-        self, stage: Stage, batch: tuple[Tensor, Tensor], batch_idx: int
-    ) -> Tensor:
+    def stage_step(self, stage: Stage, batch: tuple[Tensor, Tensor], batch_idx: int) -> Tensor:
         lr_unpacked_mosaicked_imgs, hr_demosaicked_img = batch
 
         # Superresolve
@@ -150,9 +146,7 @@ class MLPMixer(pl.LightningModule):
                 # TODO: Save a copy of the demoasicked lr imgs to verify visually that functions work as expected.
                 self.logger.experiment.add_images(  # type: ignore
                     "hr_demosaicked_img",
-                    to_dtype_image(
-                        hr_demosaicked_img ** (1 / 2.2), dtype=torch.uint8, scale=True
-                    ),
+                    to_dtype_image(hr_demosaicked_img ** (1 / 2.2), dtype=torch.uint8, scale=True),
                     self.current_epoch,
                 )
             self.logger.experiment.add_images(  # type: ignore
@@ -186,7 +180,14 @@ class MLPMixer(pl.LightningModule):
     def on_validation_epoch_end(self) -> None:
         self.on_stage_epoch_end("validation")
 
-    def optimizer_zero_grad(
-        self, epoch: int, batch_idx: int, optimizer: Optimizer
-    ) -> None:  # noqa: PLR6301
+    # TODO:
+    # It looks like we might need to manually do some stuff to grad/main_grad when using fuse_wgrad_accumulation.
+    # https://github.com/NVIDIA/Megatron-LM/blob/89d758b28f57d71fe74a6e1b85d2f93a4302121a/megatron/core/optimizer/optimizer.py#L791-L809
+    def on_after_backward(self) -> None:
+        if getattr(self.model, "fuse_wgrad_accumulation", False):
+            for param in self.model.parameters():
+                if param.grad is not None:
+                    param.main_grad.copy_(param.grad)
+
+    def optimizer_zero_grad(self, epoch: int, batch_idx: int, optimizer: Optimizer) -> None:
         optimizer.zero_grad(set_to_none=True)

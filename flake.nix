@@ -45,7 +45,7 @@
             overlays = [
               inputs.cuda-packages.overlays.default
               inputs.self.overlays.default
-              (final: _: { cudaPackages = final.cudaPackages_12_8; })
+              (final: _: { cudaPackages = final.cudaPackages_12_9; })
             ];
           };
 
@@ -61,7 +61,7 @@
             in
             {
               # default = config.treefmt.build.devShell;
-              default = pkgs.pkgsCuda.sm_89.mkShell {
+              default = pkgs.mkShell {
                 strictDeps = true;
                 inputsFrom = [ nix-cuda-sr ];
                 packages = nix-cuda-sr.optional-dependencies.dev;

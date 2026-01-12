@@ -26,9 +26,9 @@ class MLPArgs(TypedDict):
 
 def objective(trial: optuna.trial.Trial) -> float:
     args: MLPArgs = MLPArgs(
-        embed_dim=trial.suggest_int("embed_dim", 16, 512, step=16),
+        embed_dim=trial.suggest_int("embed_dim", 512, 2048, step=512),
         hidden_sizes=[
-            trial.suggest_int(f"hidden_size_{i}", 16, 512, step=16) for i in range(trial.suggest_int("depth", 1, 16))
+            trial.suggest_int(f"hidden_size_{i}", 512, 4096, step=512) for i in range(trial.suggest_int("depth", 1, 9))
         ],
         # Patch size must be a divisor of 128
         # patch_size=trial.suggest_categorical("patch_size", [2**i for i in range(3, 6)]),
@@ -44,7 +44,7 @@ def objective(trial: optuna.trial.Trial) -> float:
         benchmark=True,
         deterministic=False,
         devices="auto",
-        max_epochs=10,
+        max_epochs=3,
         # check_val_every_n_epoch=2,
         # num_sanity_val_steps=0,
         precision="transformer-engine",
@@ -54,7 +54,7 @@ def objective(trial: optuna.trial.Trial) -> float:
 
     datamodule = RealBSRDataModule(
         root=Path("/home/connorbaker/RealBSR/RAW"),
-        batch_size=4,
+        batch_size=8,
     )
 
     # init the model directly on the device and with parameters in half-precision
@@ -98,7 +98,8 @@ if __name__ == "__main__":
         load_if_exists=True,
     )
 
-    study.optimize(objective, n_trials=100)
+    # Catch CUDA out of memory errors
+    study.optimize(objective, n_trials=100, gc_after_trial=True, catch=(RuntimeError,))
 
     print("Number of finished trials: {}".format(len(study.trials)))
 

@@ -47,7 +47,6 @@ def _setup() -> None:
     torch._inductor.config.force_layout_optimization = True
     torch._inductor.config.warn_mix_layout = True
     torch._inductor.config.pad_channels_last = True
-    torch._inductor.config.use_minimal_arrayref_interface = True
     torch._inductor.config.decompose_mem_bound_mm = True
     torch._inductor.config.assume_aligned_inputs = True
 
@@ -61,7 +60,11 @@ def _setup() -> None:
     torch._inductor.config.size_asserts = False
 
     torch._inductor.config.triton.autotune_at_compile_time = True
-    torch._inductor.config.triton.multi_kernel = True
+    #       File "/tmp/nix-shell.YEBcQ1/torchinductor_connorbaker/as/cassekntzgtiwzniueepd4e2mebuosnxx3ytbcq3oiyyi4dtv35m.py", line 13029, in call
+    #     multi_kernel_0.run(buf102, buf103, 12, 50, grid=grid(12), stream=stream0)
+    #     ^^^^^^^^^^^^^^
+    # NameError: name 'multi_kernel_0' is not defined
+    # torch._inductor.config.triton.multi_kernel = True
     # torch._inductor.config.triton.use_block_ptr = True  # Causes a compile error
 
     torch._inductor.config.cuda.arch = "89"

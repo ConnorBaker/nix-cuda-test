@@ -1,25 +1,19 @@
 {
   buildPythonPackage,
   config,
-  cudaPackages,
   cutlass,
   einops,
   flash-attn,
-  flit-core,
   lib,
   makeWrapper,
-  onnx,
   optuna,
   pillow,
   pydantic,
   pyright,
   pytorch-lightning,
-  rawpy,
   ruff,
-  schedulefree,
+  setuptools,
   tensorboard-plugin-profile,
-  tensorrt,
-  modelopt,
   torch,
   torch-tb-profiler,
   torchmetrics,
@@ -34,9 +28,7 @@ let
   pyprojectAttrs = importTOML ./pyproject.toml;
 
   finalAttrs = {
-    # Must opt-out of __structuredAttrs which is on by default in our stdenv, but currently incompatible with Python
-    # packaging: https://github.com/NixOS/nixpkgs/pull/347194.
-    __structuredAttrs = false;
+    __structuredAttrs = true;
 
     pname = pyprojectAttrs.project.name;
     inherit (pyprojectAttrs.project) version;
@@ -51,7 +43,7 @@ let
 
     pyproject = true;
 
-    build-system = [ flit-core ];
+    build-system = [ setuptools ];
 
     nativeBuildInputs = [ makeWrapper ];
 
@@ -59,27 +51,22 @@ let
       cutlass
       einops
       flash-attn
-      modelopt
-      onnx
       optuna
       pillow
       pydantic
       pytorch-lightning
-      rawpy
-      schedulefree
       tensorboard-plugin-profile
-      tensorrt
       torch
       torch-tb-profiler
       torchmetrics
       torchvision
       transformer-engine
       triton
-    ] ++ modelopt.passthru.optional-dependencies.torch;
+    ];
 
     pythonImportsCheck = [ "nix_cuda_sr" ];
 
-    passthru.optional-dependencies.dev = [
+    optional-dependencies.dev = [
       pyright
       ruff
     ];

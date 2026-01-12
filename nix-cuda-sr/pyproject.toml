@@ -1,6 +1,6 @@
 [build-system]
-requires = ["flit_core >=3.2,<4"]
-build-backend = "flit_core.buildapi"
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
 
 [project]
 name = "nix_cuda_sr"
@@ -15,14 +15,14 @@ dependencies = [
     "flash-attn",
     "pydantic",
     "pytorch-lightning",
-    "rawpy",
+    # "rawpy",
     "einops",
     "pillow",
     "optuna",
-    "schedulefree",
-    "onnx",
-    "tensorrt",
-    "modelopt[torch]",
+    # "schedulefree",
+    # "onnx",
+    # "tensorrt",
+    # "modelopt[torch]",
     "tensorboard-plugin-profile",
     "torch", # torch comes with PyTorch's triton build
     "torch-tb-profiler",

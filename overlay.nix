@@ -14,6 +14,10 @@ final: prev: {
           ];
       });
       optuna = prevPythonPackages.optuna.overridePythonAttrs (prevAttrs: {
+        # So the transitive dependency on OpenCV isn't brought in, which fails to build with
+        # CUDA 12.9.
+        doCheck = false;
+        
         # TODO: These also fail on aarch64-darwin -- maybe it just fails on aarch64?
         disabledTests =
           prevAttrs.disabledTests
